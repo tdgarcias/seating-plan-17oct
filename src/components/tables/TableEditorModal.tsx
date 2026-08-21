@@ -70,7 +70,7 @@ export default function TableEditorModal({ tableId, onClose }: TableEditorModalP
               <div className="field">
                 <label>Comensales</label>
                 <NumberField
-                  value={table.capacity} min={1} max={40}
+                  value={table.capacity} min={1} max={10000}
                   onCommit={(v) => updateTable(table.id, { capacity: Math.max(1, Math.round(v)) })}
                 />
               </div>
