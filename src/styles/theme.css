@@ -1,0 +1,60 @@
+:root {
+  /* Paleta — inspirada en una possessió mallorquina: piedra de marès, cal, olivar */
+  --color-canvas: #ede4d0;
+  --color-canvas-alt: #e3d7bd;
+  --color-surface: #fbf7ee;
+  --color-surface-raised: #fffdf8;
+
+  --color-ink: #2f2a1f;
+  --color-ink-soft: #5c5340;
+  --color-ink-faint: #8a7f68;
+
+  --color-olive: #6b7a4f;
+  --color-olive-dark: #4c5837;
+  --color-sage: #a7b28e;
+  --color-terracotta: #bd5f2c;
+  --color-terracotta-dark: #964b21;
+  --color-sand: #d8c6a3;
+  --color-stone: #c6bb9e;
+  --color-wine: #7a3b32;
+  --color-wheat: #c39a44;
+  --color-sea: #55738a;
+  --color-couple: #b3261e;
+
+  --color-border: #d9cba9;
+  --color-border-soft: #e6dbc0;
+
+  --color-success: #5c7a47;
+  --color-success-bg: #e7ecdb;
+  --color-warning: #b8843a;
+  --color-warning-bg: #f4e8d2;
+  --color-error: #a3392e;
+  --color-error-bg: #f3ded9;
+  --color-info: #55738a;
+  --color-info-bg: #e2e8ec;
+
+  --font-display: 'Fraunces', 'Iowan Old Style', 'Georgia', serif;
+  --font-body: 'Work Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(47, 42, 31, 0.08);
+  --shadow-md: 0 6px 20px -6px rgba(47, 42, 31, 0.22);
+  --shadow-lg: 0 16px 40px -12px rgba(47, 42, 31, 0.32);
+
+  --header-height: 60px;
+  --sidebar-width: 320px;
+  --panel-width: 340px;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* La app se mantiene en modo claro cálido de forma intencional: el tema oscuro
+       no encaja con la estética de cal y piedra buscada. Se documenta como límite conocido. */
+  }
+}
