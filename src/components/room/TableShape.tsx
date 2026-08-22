@@ -2,14 +2,17 @@ import { useMemo } from 'react'
 import type { Guest, TableItem } from '@/types'
 import { computeSeatPositions } from '@/utils/geometry'
 
-// React's SVG typings don't include `draggable`/drag events on <g>; usamos un alias
-// para poder usar drag & drop nativo (arrastrar un invitado ya sentado a otra silla).
-const DraggableG = 'g' as unknown as React.FC
-  React.SVGProps<SVGGElement> & {
-    draggable?: boolean
-    onDragStart?: (e: React.DragEvent<SVGGElement>) => void
-  }
->
+// React's SVG typings don't include `draggable`/drag events on <g>; usamos un pequeño
+// componente propio para poder usar drag & drop nativo (arrastrar un invitado ya
+// sentado a otra silla) sin pelearnos con los tipos de React para SVG.
+type SeatGroupProps = React.SVGProps<SVGGElement> & {
+  draggable?: boolean
+  onDragStart?: (e: React.DragEvent<SVGGElement>) => void
+}
+
+function SeatGroup(props: SeatGroupProps) {
+  return <g {...props} />
+}
 
 interface TableShapeProps {
   table: TableItem
@@ -92,7 +95,7 @@ export default function TableShape({
       )}
 
       {seats.map((seat) => (
-        <DraggableG
+        <SeatGroup
           key={seat.index}
           transform={`translate(${seat.x} ${seat.y})`}
           className={`seat ${seat.guest ? 'is-occupied' : 'is-empty'}`}
@@ -121,7 +124,7 @@ export default function TableShape({
               {showFullNames ? seat.guest.fullName : initials(seat.guest.fullName)}
             </text>
           )}
-        </DraggableG>
+        </SeatGroup>
       ))}
     </g>
   )
