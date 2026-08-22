@@ -2,18 +2,6 @@ import { useMemo } from 'react'
 import type { Guest, TableItem } from '@/types'
 import { computeSeatPositions } from '@/utils/geometry'
 
-// React's SVG typings don't include `draggable`/drag events on <g>; usamos un pequeño
-// componente propio para poder usar drag & drop nativo (arrastrar un invitado ya
-// sentado a otra silla) sin pelearnos con los tipos de React para SVG.
-type SeatGroupProps = React.SVGProps<SVGGElement> & {
-  draggable?: boolean
-  onDragStart?: (e: React.DragEvent<SVGGElement>) => void
-}
-
-function SeatGroup(props: SeatGroupProps) {
-  return <g {...props} />
-}
-
 interface TableShapeProps {
   table: TableItem
   guests: Guest[]
@@ -23,6 +11,7 @@ interface TableShapeProps {
   showFullNames: boolean
   interactive: boolean
   onPointerDownTable: (e: React.PointerEvent, table: TableItem) => void
+  onSeatPointerDown: (e: React.PointerEvent, tableId: string, seatIndex: number, guestId: string) => void
   onSelect: (id: string) => void
   onOpenEditor: (id: string) => void
   onDropGuestOnTable: (guestId: string, tableId: string) => void
@@ -37,7 +26,7 @@ function initials(name: string) {
 
 export default function TableShape({
   table, guests, selected, showNames, showGuestCount, showFullNames, interactive,
-  onPointerDownTable, onSelect, onOpenEditor, onDropGuestOnTable, onDropGuestOnSeat
+  onPointerDownTable, onSeatPointerDown, onSelect, onOpenEditor, onDropGuestOnTable, onDropGuestOnSeat
 }: TableShapeProps) {
   const seats = useMemo(() => computeSeatPositions(table, guests), [table, guests])
   const occupants = guests.filter((g) => g.tableId === table.id)
@@ -49,6 +38,7 @@ export default function TableShape({
 
   return (
     <g
+      data-table-id={table.id}
       transform={`translate(${table.x} ${table.y}) rotate(${table.rotation})`}
       className={`table-shape ${selected ? 'is-selected' : ''} ${table.locked ? 'is-locked' : ''}`}
       onPointerDown={(e) => interactive && onPointerDownTable(e, table)}
@@ -95,17 +85,15 @@ export default function TableShape({
       )}
 
       {seats.map((seat) => (
-        <SeatGroup
+        <g
           key={seat.index}
+          data-seat-index={seat.index}
           transform={`translate(${seat.x} ${seat.y})`}
           className={`seat ${seat.guest ? 'is-occupied' : 'is-empty'}`}
-          draggable={!!seat.guest}
-          onPointerDown={(e) => { if (seat.guest) e.stopPropagation() }}
-          onDragStart={(e) => {
-            if (!seat.guest) return
+          onPointerDown={(e) => {
+            if (!seat.guest || !interactive) return
             e.stopPropagation()
-            e.dataTransfer.setData('application/x-guest-id', seat.guest.id)
-            e.dataTransfer.effectAllowed = 'move'
+            onSeatPointerDown(e, table.id, seat.index, seat.guest.id)
           }}
           onDragOver={allowDrop}
           onDrop={(e) => {
@@ -124,7 +112,7 @@ export default function TableShape({
               {showFullNames ? seat.guest.fullName : initials(seat.guest.fullName)}
             </text>
           )}
-        </SeatGroup>
+        </g>
       ))}
     </g>
   )
