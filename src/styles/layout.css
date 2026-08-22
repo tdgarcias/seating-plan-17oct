@@ -260,6 +260,8 @@
   stroke-width: 0.02;
 }
 .seat.is-occupied .seat-dot { fill: var(--color-wheat); stroke: var(--color-terracotta-dark); cursor: grab; }
+.room-canvas-wrap.is-dragging-guest .room-canvas { cursor: grabbing; }
+.room-canvas-wrap.is-dragging-guest .seat.is-occupied .seat-dot { cursor: grabbing; }
 .seat-label {
   font-size: 0.16px;
   fill: var(--color-ink);
