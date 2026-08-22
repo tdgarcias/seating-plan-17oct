@@ -79,7 +79,7 @@ export default function PropertiesPanel() {
             <div className="field">
               <label>Comensales</label>
               <NumberField
-                value={table.capacity} min={1} max={10000}
+                value={table.capacity} min={1}
                 onCommit={(v) => updateTable(table.id, { capacity: Math.max(1, Math.round(v)) })}
               />
             </div>
