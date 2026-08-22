@@ -4,8 +4,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog'
 import NumberField from '@/components/common/NumberField'
 import { useProjectStore, useActiveScenario, nextPaletteColor } from '@/store/useProjectStore'
 import { computeSeatPositions, defaultSeatsPerSide } from '@/utils/geometry'
-import type { TableType } from '@/types'
-import type { SeatsPerSide } from '@/types'
+import type { SeatsPerSide, TableType } from '@/types'
 
 const PALETTE = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => nextPaletteColor(i))
 
@@ -71,7 +70,7 @@ export default function TableEditorModal({ tableId, onClose }: TableEditorModalP
               <div className="field">
                 <label>Comensales</label>
                 <NumberField
-                  value={table.capacity} min={1} max={10000}
+                  value={table.capacity} min={1}
                   onCommit={(v) => updateTable(table.id, { capacity: Math.max(1, Math.round(v)) })}
                 />
               </div>
@@ -93,16 +92,49 @@ export default function TableEditorModal({ tableId, onClose }: TableEditorModalP
                 />
               </div>
             ) : (
-              <div className="field-grid">
-                <div className="field">
-                  <label>Anchura (m)</label>
-                  <NumberField value={table.width ?? 1.8} min={0.4} step={0.1} onCommit={(v) => updateTable(table.id, { width: v })} />
+              <>
+                <div className="field-grid">
+                  <div className="field">
+                    <label>Anchura (m)</label>
+                    <NumberField value={table.width ?? 1.8} min={0.4} step={0.1} onCommit={(v) => updateTable(table.id, { width: v })} />
+                  </div>
+                  <div className="field">
+                    <label>Longitud (m)</label>
+                    <NumberField value={table.length ?? 0.9} min={0.4} step={0.1} onCommit={(v) => updateTable(table.id, { length: v })} />
+                  </div>
                 </div>
+
                 <div className="field">
-                  <label>Longitud (m)</label>
-                  <NumberField value={table.length ?? 0.9} min={0.4} step={0.1} onCommit={(v) => updateTable(table.id, { length: v })} />
+                  <label>Asientos por lado</label>
+                  <p className="text-muted text-sm" style={{ marginBottom: 6 }}>
+                    Lados largos (arriba/abajo) y lados cortos (izquierda/derecha). El total de comensales se recalcula automáticamente.
+                  </p>
+                  <div className="field-grid">
+                    {(['top', 'bottom', 'left', 'right'] as const).map((side) => {
+                      const labels: Record<typeof side, string> = {
+                        top: 'Arriba (lado largo A1)',
+                        bottom: 'Abajo (lado largo A2)',
+                        left: 'Izquierda (lado corto B1)',
+                        right: 'Derecha (lado corto B2)'
+                      }
+                      const current: SeatsPerSide = table.seatsPerSide ?? defaultSeatsPerSide(table.capacity)
+                      return (
+                        <div className="field" key={side}>
+                          <label>{labels[side]}</label>
+                          <NumberField
+                            value={current[side]} min={0}
+                            onCommit={(v) => {
+                              const next: SeatsPerSide = { ...current, [side]: Math.max(0, Math.round(v)) }
+                              const total = next.top + next.bottom + next.left + next.right
+                              updateTable(table.id, { seatsPerSide: next, capacity: Math.max(1, total) })
+                            }}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
 
             <div className="field">
