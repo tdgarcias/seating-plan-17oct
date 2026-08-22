@@ -5,7 +5,6 @@ import ScenarioBar from '@/components/scenarios/ScenarioBar'
 import { downloadProjectFile, readProjectFile } from '@/services/storageService'
 import { exportGuestsCsv, exportScenarioJson, printSeatingPlan } from '@/services/exportService'
 import ExportModal from '@/components/export/ExportModal'
-import AIAnalysisModal from '@/components/analysis/AIAnalysisModal'
 
 const TABS: { id: ViewMode; label: string }[] = [
   { id: 'mapa', label: 'Mapa' },
@@ -26,7 +25,6 @@ export default function Header() {
   const scenario = useActiveScenario()
   const [exportOpen, setExportOpen] = useState(false)
   const [imageExportOpen, setImageExportOpen] = useState(false)
-  const [aiOpen, setAiOpen] = useState(false)
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -68,8 +66,6 @@ export default function Header() {
         <button className="btn btn-icon btn-ghost" title="Deshacer (Ctrl+Z)" onClick={undo} disabled={!canUndo}>↺</button>
         <button className="btn btn-icon btn-ghost" title="Rehacer (Ctrl+Shift+Z)" onClick={redo} disabled={!canRedo}>↻</button>
 
-        <button className="btn btn-secondary btn-sm" onClick={() => setAiOpen(true)}>🤖 Analizar con IA</button>
-
         <div className="app-header-export">
           <button className="btn btn-secondary btn-sm" onClick={() => setExportOpen((v) => !v)}>
             Exportar ▾
@@ -104,7 +100,6 @@ export default function Header() {
       </div>
 
       {imageExportOpen && <ExportModal onClose={() => setImageExportOpen(false)} />}
-      {aiOpen && <AIAnalysisModal onClose={() => setAiOpen(false)} />}
     </header>
   )
 }
