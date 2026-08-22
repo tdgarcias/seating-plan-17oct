@@ -5,6 +5,7 @@ import NumberField from '@/components/common/NumberField'
 import { useProjectStore, useActiveScenario, nextPaletteColor } from '@/store/useProjectStore'
 import { computeSeatPositions, defaultSeatsPerSide } from '@/utils/geometry'
 import type { TableType } from '@/types'
+import type { SeatsPerSide } from '@/types'
 
 const PALETTE = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => nextPaletteColor(i))
 
