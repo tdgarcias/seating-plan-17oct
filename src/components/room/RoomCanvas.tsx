@@ -24,6 +24,27 @@ function screenToSvgPoint(svg: SVGSVGElement, clientX: number, clientY: number) 
   return { x: transformed.x, y: transformed.y }
 }
 
+/** Busca, bajo unas coordenadas de pantalla, sobre qué asiento o mesa se ha soltado un invitado. */
+function findDropTargetAtPoint(clientX: number, clientY: number): { tableId: string; seatIndex: number | null } | null {
+  const el = document.elementFromPoint(clientX, clientY)
+  if (!el) return null
+  const seatEl = (el as Element).closest('[data-seat-index]')
+  if (seatEl) {
+    const tableEl = seatEl.closest('[data-table-id]')
+    if (tableEl) {
+      const seatIndex = parseInt(seatEl.getAttribute('data-seat-index') ?? '', 10)
+      const tableId = tableEl.getAttribute('data-table-id')
+      if (tableId && !Number.isNaN(seatIndex)) return { tableId, seatIndex }
+    }
+  }
+  const tableEl = (el as Element).closest('[data-table-id]')
+  if (tableEl) {
+    const tableId = tableEl.getAttribute('data-table-id')
+    if (tableId) return { tableId, seatIndex: null }
+  }
+  return null
+}
+
 export default function RoomCanvas({ interactive = true, svgRef: externalRef, forceFullNames }: RoomCanvasProps) {
   const scenario = useActiveScenario()
   const guests = useProjectStore((s) => s.project.guests)
@@ -43,12 +64,14 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
   const pan = useProjectStore((s) => s.ui.pan)
   const setPan = useProjectStore((s) => s.setPan)
   const [editorTableId, setEditorTableId] = useState<string | null>(null)
+  const [draggingGuestId, setDraggingGuestId] = useState<string | null>(null)
 
   const internalRef = useRef<SVGSVGElement>(null)
   const svgRef = externalRef ?? internalRef
 
   const dragState = useRef<{ kind: 'table' | 'feature'; id: string; offsetX: number; offsetY: number } | null>(null)
   const panState = useRef<{ startX: number; startY: number; origin: { x: number; y: number } } | null>(null)
+  const guestDragState = useRef<{ guestId: string } | null>(null)
 
   const { room, tables, roomFeatures } = scenario
   const showFullNames = forceFullNames ?? room.showFullSeatNames
@@ -87,9 +110,20 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
     selectFeature(feature.id)
   }, [pushHistorySnapshot, selectFeature, svgRef])
 
+  /** Inicia el arrastre de un invitado ya sentado, para moverlo a otro asiento o mesa. */
+  const handleSeatPointerDown = useCallback((e: React.PointerEvent, _tableId: string, _seatIndex: number, guestId: string) => {
+    ;(e.target as Element).setPointerCapture(e.pointerId)
+    guestDragState.current = { guestId }
+    setDraggingGuestId(guestId)
+  }, [])
+
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const svg = svgRef.current
     if (!svg) return
+    if (guestDragState.current) {
+      // El movimiento del invitado no necesita recalcular nada hasta soltar; el asiento de origen se atenúa visualmente.
+      return
+    }
     if (dragState.current) {
       const pt = screenToSvgPoint(svg, e.clientX, e.clientY)
       const { kind, id, offsetX, offsetY } = dragState.current
@@ -102,10 +136,20 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
     }
   }, [moveTable, moveRoomFeature, room.widthMeters, room.heightMeters, zoom, setPan, svgRef])
 
-  const endInteraction = useCallback(() => {
+  const endInteraction = useCallback((e: React.PointerEvent) => {
+    if (guestDragState.current) {
+      const { guestId } = guestDragState.current
+      const target = findDropTargetAtPoint(e.clientX, e.clientY)
+      if (target) {
+        if (target.seatIndex !== null) assignGuestToSeat(guestId, target.tableId, target.seatIndex)
+        else assignGuestsToTable([guestId], target.tableId)
+      }
+      guestDragState.current = null
+      setDraggingGuestId(null)
+    }
     dragState.current = null
     panState.current = null
-  }, [])
+  }, [assignGuestToSeat, assignGuestsToTable])
 
   const handleBackgroundPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 && e.button !== 1) return
@@ -142,7 +186,7 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
   }, [room.showGrid, room.gridStepMeters, room.widthMeters, room.heightMeters])
 
   return (
-    <div className="room-canvas-wrap">
+    <div className={`room-canvas-wrap ${draggingGuestId ? 'is-dragging-guest' : ''}`}>
       <svg
         ref={svgRef}
         viewBox={viewBox}
@@ -191,6 +235,7 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
             showFullNames={showFullNames}
             interactive={interactive}
             onPointerDownTable={handlePointerDownTable}
+            onSeatPointerDown={handleSeatPointerDown}
             onSelect={selectTable}
             onOpenEditor={setEditorTableId}
             onDropGuestOnTable={(guestId, tableId) => assignGuestsToTable([guestId], tableId)}
