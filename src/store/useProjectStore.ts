@@ -74,7 +74,7 @@ function freshProject(): Project {
     guests: [],
     groups: DEMO_GROUPS,
     incompatibilities: [],
-    guestSheetUrl: 'https://docs.google.com/spreadsheets/d/17JddBH3Hp6IPow7tyCG3XGoUp9NXImiGKTZBBCeQAnY/edit',
+    guestSheetUrl: 'https://docs.google.com/spreadsheets/d/17JddBH3Hp6IPow7tyCG3XGoUp9NXIMiGKTZBBCeQAnY/edit?usp=sharing',
     lastGuestSync: null
   }
 }
