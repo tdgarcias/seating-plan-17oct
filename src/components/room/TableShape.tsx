@@ -4,7 +4,7 @@ import { computeSeatPositions } from '@/utils/geometry'
 
 // React's SVG typings don't include `draggable`/drag events on <g>; usamos un alias
 // para poder usar drag & drop nativo (arrastrar un invitado ya sentado a otra silla).
-const DraggableG = 'g' as unknown as React.FC<
+const DraggableG = 'g' as unknown as React.FC
   React.SVGProps<SVGGElement> & {
     draggable?: boolean
     onDragStart?: (e: React.DragEvent<SVGGElement>) => void
