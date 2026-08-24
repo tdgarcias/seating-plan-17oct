@@ -59,7 +59,7 @@ export default function GuestList() {
   }
 
   return (
-    <aside className="sidebar panel">
+    <aside className="sidebar panel" data-unassign-zone="true">
       <div className="sidebar-section">
         <div className="flex justify-between items-center">
           <h3>Invitados</h3>
