@@ -3,6 +3,7 @@ import { useProjectStore, useActiveScenario } from '@/store/useProjectStore'
 import TableShape from './TableShape'
 import RoomFeatureMarker from './RoomFeatureMarker'
 import TableEditorModal from '@/components/tables/TableEditorModal'
+import { computeAbsoluteSeatPositions } from '@/utils/geometry'
 import type { RoomFeature, TableItem } from '@/types'
 
 const MARGIN = 1.5
@@ -24,24 +25,37 @@ function screenToSvgPoint(svg: SVGSVGElement, clientX: number, clientY: number) 
   return { x: transformed.x, y: transformed.y }
 }
 
-/** Busca, bajo unas coordenadas de pantalla, sobre qué asiento o mesa se ha soltado un invitado. */
-function findDropTargetAtPoint(clientX: number, clientY: number): { tableId: string; seatIndex: number | null } | null {
+type DropTarget =
+  | { kind: 'seat'; tableId: string; seatIndex: number }
+  | { kind: 'table'; tableId: string }
+  | { kind: 'unassign' }
+
+/**
+ * Busca, bajo unas coordenadas de pantalla, sobre qué asiento, mesa, o la zona
+ * de "invitados sin asignar" (panel lateral) se ha soltado un invitado.
+ */
+function findDropTarget(clientX: number, clientY: number): DropTarget | null {
   const el = document.elementFromPoint(clientX, clientY)
   if (!el) return null
+
   const seatEl = (el as Element).closest('[data-seat-index]')
   if (seatEl) {
     const tableEl = seatEl.closest('[data-table-id]')
     if (tableEl) {
       const seatIndex = parseInt(seatEl.getAttribute('data-seat-index') ?? '', 10)
       const tableId = tableEl.getAttribute('data-table-id')
-      if (tableId && !Number.isNaN(seatIndex)) return { tableId, seatIndex }
+      if (tableId && !Number.isNaN(seatIndex)) return { kind: 'seat', tableId, seatIndex }
     }
   }
+
   const tableEl = (el as Element).closest('[data-table-id]')
   if (tableEl) {
     const tableId = tableEl.getAttribute('data-table-id')
-    if (tableId) return { tableId, seatIndex: null }
+    if (tableId) return { kind: 'table', tableId }
   }
+
+  if ((el as Element).closest('[data-unassign-zone]')) return { kind: 'unassign' }
+
   return null
 }
 
@@ -57,6 +71,7 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
   const pushHistorySnapshot = useProjectStore((s) => s.pushHistorySnapshot)
   const assignGuestsToTable = useProjectStore((s) => s.assignGuestsToTable)
   const assignGuestToSeat = useProjectStore((s) => s.assignGuestToSeat)
+  const unassignGuest = useProjectStore((s) => s.unassignGuest)
   const deleteTable = useProjectStore((s) => s.deleteTable)
   const deleteRoomFeature = useProjectStore((s) => s.deleteRoomFeature)
   const zoom = useProjectStore((s) => s.ui.zoom)
@@ -65,6 +80,7 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
   const setPan = useProjectStore((s) => s.setPan)
   const [editorTableId, setEditorTableId] = useState<string | null>(null)
   const [draggingGuestId, setDraggingGuestId] = useState<string | null>(null)
+  const [hoverTooltip, setHoverTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
 
   const internalRef = useRef<SVGSVGElement>(null)
   const svgRef = externalRef ?? internalRef
@@ -110,18 +126,32 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
     selectFeature(feature.id)
   }, [pushHistorySnapshot, selectFeature, svgRef])
 
-  /** Inicia el arrastre de un invitado ya sentado, para moverlo a otro asiento o mesa. */
+  /** Inicia el arrastre de un invitado ya sentado, para moverlo a otro asiento, otra mesa, o devolverlo a "sin asignar". */
   const handleSeatPointerDown = useCallback((e: React.PointerEvent, _tableId: string, _seatIndex: number, guestId: string) => {
     ;(e.target as Element).setPointerCapture(e.pointerId)
     guestDragState.current = { guestId }
     setDraggingGuestId(guestId)
+    setHoverTooltip(null)
+  }, [])
+
+  const handleSeatHoverStart = useCallback((tableId: string, seatIndex: number) => {
+    const table = tables.find((t) => t.id === tableId)
+    if (!table) return
+    const abs = computeAbsoluteSeatPositions(table, guests)
+    const seat = abs.find((s) => s.index === seatIndex)
+    if (!seat || !seat.guest) return
+    setHoverTooltip({ x: seat.x, y: seat.y, text: seat.guest.fullName })
+  }, [tables, guests])
+
+  const handleSeatHoverEnd = useCallback(() => {
+    setHoverTooltip(null)
   }, [])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const svg = svgRef.current
     if (!svg) return
     if (guestDragState.current) {
-      // El movimiento del invitado no necesita recalcular nada hasta soltar; el asiento de origen se atenúa visualmente.
+      // El movimiento del invitado no necesita recalcular nada hasta soltar.
       return
     }
     if (dragState.current) {
@@ -139,17 +169,18 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
   const endInteraction = useCallback((e: React.PointerEvent) => {
     if (guestDragState.current) {
       const { guestId } = guestDragState.current
-      const target = findDropTargetAtPoint(e.clientX, e.clientY)
+      const target = findDropTarget(e.clientX, e.clientY)
       if (target) {
-        if (target.seatIndex !== null) assignGuestToSeat(guestId, target.tableId, target.seatIndex)
-        else assignGuestsToTable([guestId], target.tableId)
+        if (target.kind === 'seat') assignGuestToSeat(guestId, target.tableId, target.seatIndex)
+        else if (target.kind === 'table') assignGuestsToTable([guestId], target.tableId)
+        else if (target.kind === 'unassign') unassignGuest(guestId)
       }
       guestDragState.current = null
       setDraggingGuestId(null)
     }
     dragState.current = null
     panState.current = null
-  }, [assignGuestToSeat, assignGuestsToTable])
+  }, [assignGuestToSeat, assignGuestsToTable, unassignGuest])
 
   const handleBackgroundPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 && e.button !== 1) return
@@ -184,6 +215,8 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
     }
     return lines
   }, [room.showGrid, room.gridStepMeters, room.widthMeters, room.heightMeters])
+
+  const tooltipWidth = hoverTooltip ? Math.max(1.3, hoverTooltip.text.length * 0.145 + 0.35) : 0
 
   return (
     <div className={`room-canvas-wrap ${draggingGuestId ? 'is-dragging-guest' : ''}`}>
@@ -236,12 +269,21 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
             interactive={interactive}
             onPointerDownTable={handlePointerDownTable}
             onSeatPointerDown={handleSeatPointerDown}
+            onSeatHoverStart={handleSeatHoverStart}
+            onSeatHoverEnd={handleSeatHoverEnd}
             onSelect={selectTable}
             onOpenEditor={setEditorTableId}
             onDropGuestOnTable={(guestId, tableId) => assignGuestsToTable([guestId], tableId)}
             onDropGuestOnSeat={assignGuestToSeat}
           />
         ))}
+
+        {hoverTooltip && (
+          <g transform={`translate(${hoverTooltip.x} ${hoverTooltip.y - 0.55})`} pointerEvents="none" className="seat-tooltip">
+            <rect x={-tooltipWidth / 2} y={-0.24} width={tooltipWidth} height={0.42} rx={0.09} className="seat-tooltip-bg" />
+            <text textAnchor="middle" dy="0.08" className="seat-tooltip-text">{hoverTooltip.text}</text>
+          </g>
+        )}
       </svg>
 
       {interactive && (
