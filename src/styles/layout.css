@@ -269,6 +269,10 @@
   pointer-events: none;
 }
 .seat-label.is-couple { fill: var(--color-couple); font-weight: 800; }
+.seat-label.is-full-name { font-size: 0.135px; }
+
+.seat-tooltip-bg { fill: var(--color-ink); opacity: 0.94; }
+.seat-tooltip-text { font-size: 0.17px; fill: var(--color-surface); font-weight: 600; font-family: var(--font-body); }
 
 /* ===================== ELEMENTOS DE SALA (DJ, baños, puertas...) ===================== */
 .room-feature { cursor: grab; }
