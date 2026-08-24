@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import type { Guest, TableItem } from '@/types'
 import { computeSeatPositions } from '@/utils/geometry'
 
@@ -12,11 +12,15 @@ interface TableShapeProps {
   interactive: boolean
   onPointerDownTable: (e: React.PointerEvent, table: TableItem) => void
   onSeatPointerDown: (e: React.PointerEvent, tableId: string, seatIndex: number, guestId: string) => void
+  onSeatHoverStart: (tableId: string, seatIndex: number) => void
+  onSeatHoverEnd: () => void
   onSelect: (id: string) => void
   onOpenEditor: (id: string) => void
   onDropGuestOnTable: (guestId: string, tableId: string) => void
   onDropGuestOnSeat: (guestId: string, tableId: string, seatIndex: number) => void
 }
+
+const HOVER_DELAY_MS = 1000
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/)
@@ -26,14 +30,24 @@ function initials(name: string) {
 
 export default function TableShape({
   table, guests, selected, showNames, showGuestCount, showFullNames, interactive,
-  onPointerDownTable, onSeatPointerDown, onSelect, onOpenEditor, onDropGuestOnTable, onDropGuestOnSeat
+  onPointerDownTable, onSeatPointerDown, onSeatHoverStart, onSeatHoverEnd,
+  onSelect, onOpenEditor, onDropGuestOnTable, onDropGuestOnSeat
 }: TableShapeProps) {
   const seats = useMemo(() => computeSeatPositions(table, guests), [table, guests])
   const occupants = guests.filter((g) => g.tableId === table.id)
   const overCapacity = occupants.length > table.capacity
+  const hoverTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
 
   const allowDrop = (e: React.DragEvent) => {
     if (e.dataTransfer.types.includes('application/x-guest-id')) e.preventDefault()
+  }
+
+  const clearHoverTimer = (seatIndex: number) => {
+    const timer = hoverTimers.current.get(seatIndex)
+    if (timer) {
+      clearTimeout(timer)
+      hoverTimers.current.delete(seatIndex)
+    }
   }
 
   return (
@@ -92,8 +106,20 @@ export default function TableShape({
           className={`seat ${seat.guest ? 'is-occupied' : 'is-empty'}`}
           onPointerDown={(e) => {
             if (!seat.guest || !interactive) return
+            clearHoverTimer(seat.index)
+            onSeatHoverEnd()
             e.stopPropagation()
             onSeatPointerDown(e, table.id, seat.index, seat.guest.id)
+          }}
+          onPointerEnter={() => {
+            if (!seat.guest || !interactive) return
+            clearHoverTimer(seat.index)
+            const timer = setTimeout(() => onSeatHoverStart(table.id, seat.index), HOVER_DELAY_MS)
+            hoverTimers.current.set(seat.index, timer)
+          }}
+          onPointerLeave={() => {
+            clearHoverTimer(seat.index)
+            onSeatHoverEnd()
           }}
           onDragOver={allowDrop}
           onDrop={(e) => {
@@ -106,10 +132,10 @@ export default function TableShape({
           <circle r={0.19} className="seat-dot" />
           {seat.guest && (
             <text
-              className={`seat-label ${seat.guest.isCouple ? 'is-couple' : ''}`}
+              className={`seat-label ${seat.guest.isCouple ? 'is-couple' : ''} ${showFullNames ? 'is-full-name' : ''}`}
               textAnchor="middle" dy="0.065" transform={`rotate(${-table.rotation})`}
             >
-              {showFullNames ? seat.guest.fullName : initials(seat.guest.fullName)}
+              {showFullNames ? `${initials(seat.guest.fullName)} ${seat.guest.fullName}` : initials(seat.guest.fullName)}
             </text>
           )}
         </g>
