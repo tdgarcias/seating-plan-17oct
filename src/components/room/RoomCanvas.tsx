@@ -59,6 +59,12 @@ function findDropTarget(clientX: number, clientY: number): DropTarget | null {
   return null
 }
 
+interface HoverInfo {
+  tableId: string
+  seatIndex: number
+  text: string
+}
+
 export default function RoomCanvas({ interactive = true, svgRef: externalRef, forceFullNames }: RoomCanvasProps) {
   const scenario = useActiveScenario()
   const guests = useProjectStore((s) => s.project.guests)
@@ -80,7 +86,7 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
   const setPan = useProjectStore((s) => s.setPan)
   const [editorTableId, setEditorTableId] = useState<string | null>(null)
   const [draggingGuestId, setDraggingGuestId] = useState<string | null>(null)
-  const [hoverTooltip, setHoverTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
+  const [hoverTooltip, setHoverTooltip] = useState<HoverInfo | null>(null)
 
   const internalRef = useRef<SVGSVGElement>(null)
   const svgRef = externalRef ?? internalRef
@@ -140,7 +146,7 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
     const abs = computeAbsoluteSeatPositions(table, guests)
     const seat = abs.find((s) => s.index === seatIndex)
     if (!seat || !seat.guest) return
-    setHoverTooltip({ x: seat.x, y: seat.y, text: seat.guest.fullName })
+    setHoverTooltip({ tableId, seatIndex, text: seat.guest.fullName })
   }, [tables, guests])
 
   const handleSeatHoverEnd = useCallback(() => {
@@ -216,7 +222,28 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
     return lines
   }, [room.showGrid, room.gridStepMeters, room.widthMeters, room.heightMeters])
 
-  const tooltipWidth = hoverTooltip ? Math.max(1.3, hoverTooltip.text.length * 0.145 + 0.35) : 0
+  // Posición en píxeles de pantalla del tooltip flotante (HTML), calculada a partir
+  // de la posición del asiento en el plano. Se hace así -y no como texto SVG- para
+  // que la tipografía del tooltip sea siempre un tamaño cómodo de lectura fijo,
+  // independiente de la escala del plano (metros) o del zoom/tamaño de la sala.
+  const tooltipScreenPos = useMemo(() => {
+    if (!hoverTooltip) return null
+    const svg = svgRef.current
+    if (!svg) return null
+    const table = tables.find((t) => t.id === hoverTooltip.tableId)
+    if (!table) return null
+    const abs = computeAbsoluteSeatPositions(table, guests)
+    const seat = abs.find((s) => s.index === hoverTooltip.seatIndex)
+    if (!seat) return null
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return null
+    const pt = svg.createSVGPoint()
+    pt.x = seat.x
+    pt.y = seat.y
+    const screenPt = pt.matrixTransform(ctm)
+    const wrapRect = svg.getBoundingClientRect()
+    return { x: screenPt.x - wrapRect.left, y: screenPt.y - wrapRect.top }
+  }, [hoverTooltip, tables, guests, zoom, pan, svgRef])
 
   return (
     <div className={`room-canvas-wrap ${draggingGuestId ? 'is-dragging-guest' : ''}`}>
@@ -277,14 +304,32 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
             onDropGuestOnSeat={assignGuestToSeat}
           />
         ))}
-
-        {hoverTooltip && (
-          <g transform={`translate(${hoverTooltip.x} ${hoverTooltip.y - 0.55})`} pointerEvents="none" className="seat-tooltip">
-            <rect x={-tooltipWidth / 2} y={-0.24} width={tooltipWidth} height={0.42} rx={0.09} className="seat-tooltip-bg" />
-            <text textAnchor="middle" dy="0.08" className="seat-tooltip-text">{hoverTooltip.text}</text>
-          </g>
-        )}
       </svg>
+
+      {hoverTooltip && tooltipScreenPos && (
+        <div
+          style={{
+            position: 'absolute',
+            left: tooltipScreenPos.x,
+            top: tooltipScreenPos.y,
+            transform: 'translate(-50%, -135%)',
+            background: 'var(--color-ink)',
+            color: 'var(--color-surface)',
+            fontFamily: 'var(--font-body)',
+            fontSize: '13px',
+            fontWeight: 600,
+            lineHeight: 1.2,
+            padding: '5px 10px',
+            borderRadius: '6px',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+            zIndex: 50
+          }}
+        >
+          {hoverTooltip.text}
+        </div>
+      )}
 
       {interactive && (
         <div className="canvas-zoom-controls">
