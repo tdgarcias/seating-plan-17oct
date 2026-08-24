@@ -114,6 +114,7 @@ input, select, textarea {
   border-color: var(--color-border);
 }
 .btn-secondary:hover { background: var(--color-canvas-alt); }
+.btn-secondary.is-active { background: var(--color-olive); color: #fff; border-color: var(--color-olive-dark); }
 
 .btn-ghost {
   background: transparent;
