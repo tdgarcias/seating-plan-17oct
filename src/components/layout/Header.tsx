@@ -22,6 +22,7 @@ export default function Header() {
   const canRedo = useProjectStore((s) => s.history.canRedo())
   const replaceProject = useProjectStore((s) => s.replaceProject)
   const pushToast = useProjectStore((s) => s.pushToast)
+  const updateRoomSettings = useProjectStore((s) => s.updateRoomSettings)
   const scenario = useActiveScenario()
   const [exportOpen, setExportOpen] = useState(false)
   const [imageExportOpen, setImageExportOpen] = useState(false)
@@ -65,6 +66,14 @@ export default function Header() {
       <div className="app-header-actions">
         <button className="btn btn-icon btn-ghost" title="Deshacer (Ctrl+Z)" onClick={undo} disabled={!canUndo}>↺</button>
         <button className="btn btn-icon btn-ghost" title="Rehacer (Ctrl+Shift+Z)" onClick={redo} disabled={!canRedo}>↻</button>
+
+        <button
+          className={`btn btn-secondary btn-sm ${scenario.room.showFullSeatNames ? 'is-active' : ''}`}
+          title="Mostrar el nombre completo de cada invitado junto a su silla"
+          onClick={() => updateRoomSettings({ showFullSeatNames: !scenario.room.showFullSeatNames })}
+        >
+          🔤 {scenario.room.showFullSeatNames ? 'Nombres completos' : 'Solo iniciales'}
+        </button>
 
         <div className="app-header-export">
           <button className="btn btn-secondary btn-sm" onClick={() => setExportOpen((v) => !v)}>
