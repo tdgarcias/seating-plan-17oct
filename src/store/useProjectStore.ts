@@ -18,22 +18,20 @@ import type {
 import { createId } from '@/utils/id'
 import { DEMO_GROUPS, generateDemoGuests, generateDemoIncompatibilities } from '@/services/demoData'
 import { fetchGuestsFromUrl, mergePreservingAssignments, GuestServiceError } from '@/services/guestService'
-import { loadProject, saveProjectDebounced } from '@/services/storageService'
+import { loadProject, saveProjectDebounced, backupStoredProject } from '@/services/storageService'
+import {
+  DEFAULT_ROOM,
+  captureAssignments,
+  sameAssignments,
+  switchActiveScenario,
+  findScenario,
+  migrateProject,
+  pruneAssignments,
+  CURRENT_SCHEMA_VERSION
+} from './scenarioAssignments'
 import { runSeatingAnalysis, AIAnalysisError } from '@/services/aiAnalysisService'
 import { defaultSeatsPerSide, computeAbsoluteSeatPositions, snap, clamp } from '@/utils/geometry'
 import { HistoryStack, type HistorySnapshot } from './history'
-
-const DEFAULT_ROOM: RoomSettings = {
-  widthMeters: 20,
-  heightMeters: 16,
-  showGrid: true,
-  snapToGrid: true,
-  showMeasurements: true,
-  showTableNames: true,
-  showGuestCount: true,
-  showFullSeatNames: false,
-  gridStepMeters: 0.5
-}
 
 const TABLE_PALETTE = [
   '#7C8A5A', // verde oliva
@@ -59,6 +57,7 @@ function freshScenario(name: string): Scenario {
     room: { ...DEFAULT_ROOM },
     tables: [],
     roomFeatures: [],
+    assignments: {},
     createdAt: now,
     updatedAt: now
   }
@@ -67,6 +66,7 @@ function freshScenario(name: string): Scenario {
 function freshProject(): Project {
   const scenario = freshScenario('Distribución inicial')
   return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     id: createId('project'),
     settings: { coupleNames: 'Nuestra boda', weddingDate: '' },
     scenarios: [scenario],
@@ -110,7 +110,8 @@ interface ProjectStore {
   init: () => void
 
   // scenarios
-  createScenario: (name: string) => void
+  /** Crea un escenario vacío o, si se indica `fromId`, una copia independiente de ese escenario. */
+  createScenario: (name: string, fromId?: string | null) => void
   duplicateScenario: (id: string) => void
   renameScenario: (id: string, name: string) => void
   deleteScenario: (id: string) => void
@@ -207,11 +208,25 @@ function loadPersistedHistory() {
 }
 
 export const useProjectStore = create<ProjectStore>((set, get) => {
+  /** Vuelca el espejo de los invitados al reparto del escenario activo. */
+  function syncActiveAssignments(draft: Project) {
+    const scenario = findScenario(draft, draft.activeScenarioId)
+    if (!scenario) return
+    const current = captureAssignments(draft.guests)
+    if (!sameAssignments(current, scenario.assignments ?? {})) {
+      scenario.assignments = current
+      scenario.updatedAt = Date.now()
+    }
+  }
+
   function withHistory(recipe: (draft: Project) => void) {
     const { project } = get()
     historyStack.push(snapshotOf(project))
     persistHistory()
-    const next = produce(project, recipe)
+    const next = produce(project, (draft) => {
+      recipe(draft)
+      syncActiveAssignments(draft)
+    })
     set({ project: next })
     saveProjectDebounced(next)
   }
@@ -244,47 +259,55 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       const stored = loadProject()
       loadPersistedHistory()
       if (stored && stored.scenarios?.length) {
-        // Compatibilidad con proyectos guardados antes de añadir roomFeatures/incompatibilities/showFullSeatNames.
-        const migrated: Project = {
-          ...stored,
-          incompatibilities: stored.incompatibilities ?? [],
-          scenarios: stored.scenarios.map((s) => ({
-            ...s,
-            roomFeatures: s.roomFeatures ?? [],
-            room: { ...DEFAULT_ROOM, ...s.room }
-          })),
-          guests: stored.guests.map((g) => ({ ...g, role: g.role ?? '', isCouple: g.isCouple ?? false }))
+        const { project: migrated, migrated: wasOld, invalidAssignments } = migrateProject(stored)
+        if (wasOld) {
+          // copia de seguridad del formato antiguo antes de sobrescribirlo, e histórico incompatible fuera
+          backupStoredProject()
+          historyStack.reset()
+          persistHistory()
         }
         set({ project: migrated, ui: { ...get().ui, hasSeenOnboarding: migrated.guests.length > 0 } })
+        saveProjectDebounced(migrated, 50)
+        if (wasOld) {
+          get().pushToast('info', 'Proyecto actualizado: ahora cada escenario guarda su propio reparto.')
+        }
+        if (invalidAssignments > 0) {
+          get().pushToast('error', `${invalidAssignments} asignación(es) apuntaban a mesas o asientos inexistentes y se han liberado.`)
+        }
       } else {
         saveProjectDebounced(get().project, 50)
       }
     },
 
-    createScenario: (name) => {
+    createScenario: (name, fromId) => {
       withHistory((draft) => {
-        const scenario = freshScenario(name)
+        // asegurar que el escenario activo tiene su reparto al día antes de copiar
+        syncActiveAssignments(draft)
+        const source = fromId ? draft.scenarios.find((s) => s.id === fromId) : undefined
+        const scenario: Scenario = source
+          ? {
+              // JSON: copia profunda segura también sobre borradores de immer (structuredClone no admite Proxy)
+              ...(JSON.parse(JSON.stringify(source)) as Scenario),
+              id: createId('scenario'),
+              name,
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            }
+          : freshScenario(name)
         draft.scenarios.push(scenario)
-        draft.activeScenarioId = scenario.id
+        switchActiveScenario(draft, scenario.id)
       })
       get().pushToast('success', `Escenario "${name}" creado`)
     },
 
     duplicateScenario: (id) => {
-      withHistory((draft) => {
-        const original = draft.scenarios.find((s) => s.id === id)
-        if (!original) return
-        const copy: Scenario = {
-          ...JSON.parse(JSON.stringify(original)),
-          id: createId('scenario'),
-          name: `${original.name} (copia)`,
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        }
-        draft.scenarios.push(copy)
-        draft.activeScenarioId = copy.id
-      })
-      get().pushToast('success', 'Escenario duplicado')
+      const original = get().project.scenarios.find((s) => s.id === id)
+      if (!original) return
+      const base = `${original.name} (copia)`
+      let name = base
+      let n = 2
+      while (get().project.scenarios.some((s) => s.name === name)) name = `${base} ${n++}`
+      get().createScenario(name, id)
     },
 
     renameScenario: (id, name) => {
@@ -301,22 +324,30 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         return
       }
       withHistory((draft) => {
+        if (draft.activeScenarioId === id) {
+          const fallback = draft.scenarios.find((s) => s.id !== id)!
+          switchActiveScenario(draft, fallback.id)
+        }
         draft.scenarios = draft.scenarios.filter((s) => s.id !== id)
-        if (draft.activeScenarioId === id) draft.activeScenarioId = draft.scenarios[0].id
-        // liberar invitados asignados a mesas de ese escenario si no existen en otros escenarios
-        const remainingTableIds = new Set(draft.scenarios.flatMap((s) => s.tables.map((t) => t.id)))
-        draft.guests.forEach((g) => {
-          if (g.tableId && !remainingTableIds.has(g.tableId)) {
-            g.tableId = null
-            g.seatIndex = null
-          }
-        })
       })
       get().pushToast('info', 'Escenario eliminado')
     },
 
     setActiveScenario: (id) => {
-      set((state) => ({ project: { ...state.project, activeScenarioId: id } }))
+      const { project } = get()
+      if (id === project.activeScenarioId || !project.scenarios.some((s) => s.id === id)) return
+      let invalid = 0
+      const next = produce(project, (draft) => {
+        invalid = switchActiveScenario(draft, id)
+      })
+      set((state) => ({
+        project: next,
+        ui: { ...state.ui, selectedTableId: null, selectedFeatureId: null, selectedGuestIds: [], aiAnalysisResult: null, aiAnalysisStatus: 'idle' }
+      }))
+      saveProjectDebounced(next, 50)
+      if (invalid > 0) {
+        get().pushToast('error', `${invalid} invitado(s) apuntaban a mesas o asientos que ya no existen y se han liberado.`)
+      }
     },
 
     updateRoomSettings: (partial) => {
@@ -429,6 +460,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         draft.groups = DEMO_GROUPS
         draft.incompatibilities = generateDemoIncompatibilities(demoGuests)
         draft.lastGuestSync = Date.now()
+        draft.scenarios.forEach((s) => { s.assignments = {} })
       })
       get().pushToast('success', '50 invitados de ejemplo cargados')
     },
@@ -443,12 +475,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       set((state) => ({ ui: { ...state.ui, guestLoadStatus: 'loading', guestLoadError: null } }))
       try {
         const result = await fetchGuestsFromUrl(targetUrl)
+        let dietaryConflicts = 0
         withHistory((draft) => {
-          draft.guests = mergePreservingAssignments(draft.guests, result.guests)
+          const merged = mergePreservingAssignments(draft.guests, result.guests)
+          draft.guests = merged.guests
+          dietaryConflicts = merged.dietaryConflicts
           draft.lastGuestSync = result.fetchedAt
+          pruneAssignments(draft)
         })
         set((state) => ({ ui: { ...state.ui, guestLoadStatus: 'success', guestLoadError: null } }))
         get().pushToast('success', `${result.guests.length} invitados importados desde Google Sheets`)
+        if (dietaryConflicts > 0) {
+          get().pushToast(
+            'info',
+            `${dietaryConflicts} invitado(s) tienen alergias editadas en la app y un texto distinto en la hoja. Se ha conservado lo de la app; revisa su ficha.`
+          )
+        }
       } catch (err) {
         const message = err instanceof GuestServiceError ? err.message : 'Error inesperado al importar invitados.'
         set((state) => ({ ui: { ...state.ui, guestLoadStatus: 'error', guestLoadError: message } }))
@@ -794,11 +836,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       persistHistory()
     },
 
-    replaceProject: (project) => {
+    replaceProject: (incoming) => {
+      const { project, migrated, invalidAssignments } = migrateProject(incoming)
       historyStack.reset()
       persistHistory()
       set((state) => ({ project, ui: { ...state.ui, selectedTableId: null, selectedFeatureId: null, selectedGuestIds: [] } }))
       saveProjectDebounced(project, 50)
+      if (migrated) {
+        get().pushToast('info', 'Archivo en formato antiguo: su reparto se ha copiado a todos los escenarios. A partir de ahora cada escenario es independiente.')
+      }
+      if (invalidAssignments > 0) {
+        get().pushToast('error', `${invalidAssignments} asignación(es) no válidas se han liberado al importar.`)
+      }
     },
 
     updateSettings: (partial) => {

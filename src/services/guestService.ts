@@ -1,5 +1,6 @@
 import type { ConfirmationStatus, Guest, GuestColumnMapping } from '@/types'
 import { createId } from '@/utils/id'
+import { emptyDietary, hasManualDietary, parseDietaryText } from '@/utils/dietary'
 
 /**
  * guestService
@@ -188,7 +189,10 @@ function buildGuest(
     companions: parseCompanions(idx.iCompanions !== -1 ? row[idx.iCompanions] : undefined),
     status: parseStatus(idx.iStatus !== -1 ? row[idx.iStatus] : undefined),
     notes,
-    dietary: idx.iDietary !== -1 ? row[idx.iDietary]?.trim() ?? '' : '',
+    dietary: (() => {
+      const text = idx.iDietary !== -1 ? row[idx.iDietary]?.trim() ?? '' : ''
+      return text ? { ...parseDietaryText(text), sheetText: text } : emptyDietary()
+    })(),
     role,
     isCouple: detectIsCouple(notes, role),
     sourceRow: rowIdx + 2, // +2: fila 1 = cabecera, base 1 = igual que en la hoja
@@ -254,18 +258,39 @@ export async function fetchGuestsFromUrl(sheetUrlOrId: string): Promise<FetchRes
 }
 
 /**
- * Fusiona una nueva lista de invitados (recién importada) con la lista existente,
- * preservando las asignaciones de mesa/asiento ya hechas en la app cuando el
- * invitado coincide por nombre completo.
+ * Fusiona una nueva lista de invitados (recién importada) con la lista existente.
+ * - Conserva el ID del invitado existente (los repartos de cada escenario se guardan por ID).
+ * - Conserva la mesa/asiento del escenario activo.
+ * - Alergias: si se editaron a mano en la app, se conservan; si la hoja trae un texto nuevo
+ *   se guarda en `sheetText` y se cuenta como conflicto para avisar al usuario.
  */
-export function mergePreservingAssignments(existing: Guest[], incoming: Guest[]): Guest[] {
+export function mergePreservingAssignments(
+  existing: Guest[],
+  incoming: Guest[]
+): { guests: Guest[]; dietaryConflicts: number } {
   const byName = new Map(existing.map((g) => [g.fullName.toLowerCase().trim(), g]))
-  return incoming.map((g) => {
+  const usedIds = new Set<string>()
+  let dietaryConflicts = 0
+  const guests = incoming.map((g) => {
     const prev = byName.get(g.fullName.toLowerCase().trim())
-    if (!prev) return g
+    if (!prev || usedIds.has(prev.id)) return g
+    usedIds.add(prev.id)
     // Si la hoja no aporta rol/marca de novios para este invitado, conserva lo editado manualmente en la app.
     const role = g.role || prev.role
     const isCouple = g.role || g.notes ? g.isCouple : prev.isCouple
-    return { ...g, tableId: prev.tableId, seatIndex: prev.seatIndex, role, isCouple }
+
+    const sheetText = g.dietary.sheetText ?? ''
+    const prevSheetText = prev.dietary.sheetText ?? ''
+    let dietary = prev.dietary
+    if (hasManualDietary(prev.dietary)) {
+      if (sheetText && sheetText !== prevSheetText) dietaryConflicts++
+      dietary = { ...prev.dietary, sheetText: sheetText || undefined }
+    } else {
+      // sin edición manual: manda la hoja
+      dietary = g.dietary
+    }
+
+    return { ...g, id: prev.id, tableId: prev.tableId, seatIndex: prev.seatIndex, role, isCouple, dietary }
   })
+  return { guests, dietaryConflicts }
 }

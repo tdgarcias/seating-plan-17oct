@@ -4,8 +4,10 @@ import GuestCard from './GuestCard'
 import GuestDetailModal from './GuestDetailModal'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 import Modal from '@/components/common/Modal'
+import DietarySummaryModal from '@/components/dietary/DietarySummaryModal'
+import { hasDietary } from '@/utils/dietary'
 
-type Filter = 'todos' | 'sin-asignar' | 'asignados'
+type Filter = 'todos' | 'sin-asignar' | 'asignados' | 'restricciones'
 
 export default function GuestList() {
   const project = useProjectStore((s) => s.project)
@@ -29,6 +31,8 @@ export default function GuestList() {
   const [distributeMode, setDistributeMode] = useState<'random' | 'byGroup' | 'balanced' | null>(null)
   const [sheetModalOpen, setSheetModalOpen] = useState(false)
   const [urlDraft, setUrlDraft] = useState(project.guestSheetUrl)
+  const [dietSummaryOpen, setDietSummaryOpen] = useState(false)
+  const dietaryCount = project.guests.filter((g) => g.status !== 'rechazado' && hasDietary(g.dietary)).length
 
   const tableName = useMemo(() => new Map(scenario.tables.map((t) => [t.id, t.name])), [scenario.tables])
 
@@ -40,6 +44,7 @@ export default function GuestList() {
     if (statusFilter !== 'todos' && g.status !== statusFilter) return false
     if (filter === 'sin-asignar' && g.tableId) return false
     if (filter === 'asignados' && !g.tableId) return false
+    if (filter === 'restricciones' && !hasDietary(g.dietary)) return false
     return true
   })
 
@@ -93,6 +98,9 @@ export default function GuestList() {
         <div><strong>{capacity}</strong><span>Capacidad</span></div>
         <div><strong>{occupancy}%</strong><span>Ocupación</span></div>
       </div>
+      <button className="dietary-summary-link text-sm" onClick={() => setDietSummaryOpen(true)}>
+        🍽 {dietaryCount} invitado(s) con alergias o dietas · ver resumen
+      </button>
 
       <div className="sidebar-section">
         <input
@@ -118,6 +126,7 @@ export default function GuestList() {
           <button className={filter === 'todos' ? 'is-active' : ''} onClick={() => setFilter('todos')}>Todos</button>
           <button className={filter === 'sin-asignar' ? 'is-active' : ''} onClick={() => setFilter('sin-asignar')}>Sin mesa</button>
           <button className={filter === 'asignados' ? 'is-active' : ''} onClick={() => setFilter('asignados')}>Asignados</button>
+          <button className={filter === 'restricciones' ? 'is-active' : ''} onClick={() => setFilter('restricciones')} title="Con alergias, intolerancias o dietas">Alergias</button>
         </div>
       </div>
 
@@ -164,6 +173,8 @@ export default function GuestList() {
           </button>
         </div>
       )}
+
+      {dietSummaryOpen && <DietarySummaryModal onClose={() => setDietSummaryOpen(false)} />}
 
       {detailId && <GuestDetailModal guestId={detailId} onClose={() => setDetailId(null)} />}
 

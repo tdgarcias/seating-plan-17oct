@@ -17,16 +17,40 @@ export interface Guest {
   companions: number
   status: ConfirmationStatus
   notes: string
-  dietary: string
+  /** Alergias, intolerancias y dietas especiales (estructurado). */
+  dietary: DietaryInfo
   /** Rol del invitado respecto a los novios (familiar, amigo, compañero de trabajo...). Texto libre. */
   role: string
   /** True si este invitado ES uno de los novios (detectado en la hoja o marcado manualmente). */
   isCouple: boolean
   /** Fila original en la hoja de origen, si procede (para depuración/reimportación). */
   sourceRow?: number
-  /** Asignación actual. Ambos null si no está colocado. */
+  /**
+   * Asignación en el ESCENARIO ACTIVO. Es un espejo de `activeScenario.assignments[guest.id]`:
+   * se recarga al cambiar de escenario y se vuelca al escenario activo tras cada cambio.
+   * La fuente de verdad de cada escenario es `Scenario.assignments`.
+   */
   tableId: string | null
   seatIndex: number | null
+}
+
+/** Los 14 alérgenos de declaración obligatoria en la UE (Reglamento 1169/2011). */
+export type AllergenCode =
+  | 'gluten' | 'crustaceos' | 'huevo' | 'pescado' | 'cacahuete' | 'soja' | 'lacteos'
+  | 'frutos_cascara' | 'apio' | 'mostaza' | 'sesamo' | 'sulfitos' | 'altramuces' | 'moluscos'
+
+export type DietCode = 'vegetariano' | 'vegano' | 'sin_cerdo' | 'halal' | 'kosher' | 'embarazada' | 'infantil'
+
+export type DietarySeverity = 'alergia' | 'intolerancia' | 'preferencia'
+
+export interface DietaryInfo {
+  allergens: AllergenCode[]
+  diets: DietCode[]
+  severity: DietarySeverity | null
+  /** Texto libre: "celíaca estricta, cuidado con contaminación cruzada". */
+  notes: string
+  /** Último texto leído de la columna de alergias de Google Sheets (para detectar cambios). */
+  sheetText?: string
 }
 
 export interface GuestGroup {
@@ -99,12 +123,20 @@ export interface RoomSettings {
   gridStepMeters: number
 }
 
+/** Dónde se sienta un invitado dentro de un escenario concreto. */
+export interface SeatAssignment {
+  tableId: string
+  seatIndex: number | null
+}
+
 export interface Scenario {
   id: string
   name: string
   room: RoomSettings
   tables: TableItem[]
   roomFeatures: RoomFeature[]
+  /** Reparto propio de este escenario: guestId -> mesa/asiento. Independiente de los demás escenarios. */
+  assignments: Record<string, SeatAssignment>
   createdAt: number
   updatedAt: number
 }
@@ -115,6 +147,8 @@ export interface ProjectSettings {
 }
 
 export interface Project {
+  /** 2 = reparto por escenario + alergias estructuradas. Ausente en proyectos antiguos. */
+  schemaVersion?: number
   id: string
   settings: ProjectSettings
   scenarios: Scenario[]

@@ -483,3 +483,120 @@
   .app-main { padding: 0; height: auto; }
   .room-canvas-wrap { border: none; box-shadow: none; height: 100vh; }
 }
+
+/* ===================================================================
+   Escenarios independientes, alergias e impresión A4
+   =================================================================== */
+
+/* --- escenarios --- */
+.scenario-current-meta { white-space: nowrap; }
+.scenario-menu { min-width: 380px; padding-bottom: 8px; }
+.scenario-menu-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 6px 8px; border-bottom: 1px solid var(--color-border-soft); margin-bottom: 4px;
+}
+.scenario-row-name { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; }
+.scenario-row.is-active .scenario-row-name > span:first-child { font-weight: 700; color: var(--color-olive-dark); }
+.scenario-create { padding: 4px 6px; }
+.btn-icon:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.compare-table {
+  margin-top: 8px; max-height: 50vh; border: 1px solid var(--color-border-soft); border-radius: var(--radius-sm);
+}
+.compare-row {
+  display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px;
+  padding: 6px 10px; font-size: 13px; border-bottom: 1px solid var(--color-border-soft);
+}
+.compare-row:last-child { border-bottom: none; }
+.compare-head {
+  position: sticky; top: 0; background: var(--color-canvas-alt); font-weight: 700; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.compare-changed { color: var(--color-terracotta-dark); font-weight: 600; }
+
+/* --- alergias --- */
+.dietary-editor { display: flex; flex-direction: column; gap: 8px; }
+.dietary-editor-caption {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-ink-faint); margin-top: 2px;
+}
+.dietary-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dietary-chip {
+  border: 1px solid var(--color-border); background: var(--color-surface-raised); color: var(--color-ink-soft);
+  border-radius: var(--radius-pill); padding: 4px 10px; font-size: 12.5px; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.dietary-chip:hover { background: var(--color-canvas-alt); }
+.dietary-chip.is-on {
+  background: var(--color-terracotta); border-color: var(--color-terracotta-dark); color: #fff; font-weight: 600;
+}
+.dietary-sheet-note {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--color-warning-bg); color: var(--color-ink-soft); padding: 6px 10px; border-radius: var(--radius-sm);
+}
+.dietary-badge {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700;
+  padding: 1px 6px; border-radius: var(--radius-pill);
+  background: var(--color-warning-bg); color: var(--color-warning); white-space: nowrap;
+}
+.dietary-badge.is-severe { background: var(--color-error-bg); color: var(--color-error); }
+.dietary-summary-link {
+  display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+  padding: 6px 16px; color: var(--color-terracotta-dark); font-weight: 600;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.dietary-summary-link:hover { background: var(--color-canvas-alt); }
+.dietary-totals { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.dietary-table-list { max-height: 55vh; margin-top: 12px; }
+.dietary-table-block { margin-bottom: 12px; }
+.dietary-table-block h4 { font-size: 14px; margin-bottom: 4px; }
+.dietary-row {
+  display: grid; grid-template-columns: 32px 1.2fr 0.8fr 1.6fr; gap: 8px; align-items: baseline;
+  padding: 4px 6px; border-bottom: 1px solid var(--color-border-soft); font-size: 13px;
+}
+.dietary-row.is-severe { border-left: 3px solid var(--color-error); }
+.dietary-row-seat { font-weight: 700; color: var(--color-ink-faint); text-align: right; }
+.dietary-row-name { font-weight: 600; }
+.dietary-row-tags { font-weight: 700; color: var(--color-terracotta-dark); }
+
+/* marca de alergia en el asiento del plano */
+.seat-diet-marker circle { fill: var(--color-warning); stroke: var(--color-surface-raised); stroke-width: 0.02; }
+.seat-diet-marker.is-severe circle { fill: var(--color-error); }
+.seat-diet-marker text { font-size: 0.11px; font-weight: 800; fill: #fff; font-family: var(--font-body); pointer-events: none; }
+
+/* --- impresión A4 --- */
+.dropdown-menu .dropdown-highlight { font-weight: 700; color: var(--color-olive-dark); }
+.print-modal-grid {
+  display: grid; grid-template-columns: 330px 1fr; gap: 18px; margin-top: 14px; min-height: 0;
+}
+.print-options { overflow-y: auto; max-height: 72vh; padding-right: 4px; }
+.print-checks { display: flex; flex-direction: column; gap: 6px; }
+.checkbox-row.is-disabled { opacity: 0.5; }
+.print-report {
+  display: flex; flex-direction: column; gap: 3px; padding: 8px 10px;
+  background: var(--color-canvas-alt); border-radius: var(--radius-sm); color: var(--color-ink-soft);
+}
+.print-warning { color: var(--color-error); font-weight: 600; }
+.print-preview {
+  position: relative; background: #8d8676; border-radius: var(--radius-md); overflow: hidden; height: 72vh; min-height: 420px;
+}
+.print-preview iframe { width: 100%; height: 100%; border: none; background: #fff; }
+.print-preview-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: #fff; }
+.print-preview-busy {
+  position: absolute; top: 10px; right: 10px; background: var(--color-ink); color: #fff;
+  padding: 4px 10px; border-radius: var(--radius-pill); font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .print-modal-grid { grid-template-columns: 1fr; }
+  .print-options { max-height: none; }
+  .print-preview { height: 60vh; }
+  .scenario-menu { min-width: 300px; }
+  .scenario-current-meta { display: none; }
+}
+.scenario-current-top { display: flex; gap: 4px; font-size: 10.5px; letter-spacing: 0.03em; line-height: 1.3; }
+.scenario-current-name { display: flex; gap: 6px; align-items: baseline; line-height: 1.25; }
+.dropdown-menu .scenario-create .btn { width: auto; }
+.dropdown-menu .scenario-create .btn-primary { background: var(--color-olive); color: #fff; }
+.dropdown-menu .scenario-create .btn-primary:hover { background: var(--color-olive-dark); }
+.dropdown-menu .scenario-create .btn-primary:disabled { opacity: 0.5; }
+.dietary-chip.is-on:hover { background: var(--color-terracotta-dark); color: #fff; }

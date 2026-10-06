@@ -1,6 +1,17 @@
 import type { Project } from '@/types'
 
 const STORAGE_KEY = 'seating-plan-boda:project:v1'
+const BACKUP_KEY = 'seating-plan-boda:project:backup-before-v2'
+
+/** Copia el proyecto guardado tal cual (formato antiguo) antes de migrarlo. Solo se hace una vez. */
+export function backupStoredProject() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw && !localStorage.getItem(BACKUP_KEY)) localStorage.setItem(BACKUP_KEY, raw)
+  } catch {
+    /* sin espacio o sin localStorage: la migración sigue igualmente */
+  }
+}
 
 export function loadProject(): Project | null {
   try {

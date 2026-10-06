@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import Modal from '@/components/common/Modal'
 import { useProjectStore, useActiveScenario } from '@/store/useProjectStore'
 import { SUGGESTED_ROLES, type ConfirmationStatus } from '@/types'
+import DietaryEditor from '@/components/dietary/DietaryEditor'
 
 interface GuestDetailModalProps {
   guestId: string
@@ -45,7 +46,7 @@ export default function GuestDetailModal({ guestId, onClose }: GuestDetailModalP
   }
 
   return (
-    <Modal onClose={onClose} width={480}>
+    <Modal onClose={onClose} width={620}>
       <h2 className={guest.isCouple ? 'is-couple-text' : ''}>{guest.isCouple && '♥ '}{guest.fullName}</h2>
       <p className="text-soft text-sm" style={{ marginTop: 2 }}>
         {table ? `${table.name} · asiento ${guest.seatIndex !== null ? guest.seatIndex + 1 : '—'}` : 'Sin mesa asignada'}
@@ -98,8 +99,8 @@ export default function GuestDetailModal({ guestId, onClose }: GuestDetailModalP
         </label>
 
         <div className="field">
-          <label>Restricciones alimentarias</label>
-          <input className="input" value={draft.dietary} onChange={(e) => setDraft({ ...draft, dietary: e.target.value })} />
+          <label>Alergias, intolerancias y dietas</label>
+          <DietaryEditor value={draft.dietary} onChange={(dietary) => setDraft({ ...draft, dietary })} />
         </div>
 
         <div className="field">

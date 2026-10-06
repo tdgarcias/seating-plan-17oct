@@ -1,3 +1,4 @@
+import { formatDietary, hasDietary, dietaryAbbrs } from '@/utils/dietary'
 import type { Guest, Scenario, TableItem } from '@/types'
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -32,7 +33,7 @@ export function exportGuestsCsv(guests: Guest[], tables: TableItem[], filename =
     String(g.companions),
     g.status,
     g.notes,
-    g.dietary,
+    formatDietary(g.dietary),
     g.tableId ? tableName.get(g.tableId) ?? '' : '',
     g.seatIndex !== null ? String(g.seatIndex + 1) : ''
   ])
@@ -50,7 +51,13 @@ export function exportScenarioJson(scenario: Scenario, guests: Guest[], filename
     mesas: scenario.tables.map((t) => ({
       ...t,
       invitados: assigned.filter((g) => g.tableId === t.id).map((g) => ({
-        nombre: g.fullName, rol: g.role, novios: g.isCouple, asiento: g.seatIndex !== null ? g.seatIndex + 1 : null
+        nombre: g.fullName,
+        rol: g.role,
+        novios: g.isCouple,
+        asiento: g.seatIndex !== null ? g.seatIndex + 1 : null,
+        ...(hasDietary(g.dietary)
+          ? { alergias: dietaryAbbrs(g.dietary), restricciones: formatDietary(g.dietary), gravedad: g.dietary.severity }
+          : {})
       }))
     }))
   }

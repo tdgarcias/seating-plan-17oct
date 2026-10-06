@@ -4,6 +4,7 @@ import TableShape from './TableShape'
 import RoomFeatureMarker from './RoomFeatureMarker'
 import TableEditorModal from '@/components/tables/TableEditorModal'
 import { computeAbsoluteSeatPositions } from '@/utils/geometry'
+import { formatDietary, hasDietary } from '@/utils/dietary'
 import type { RoomFeature, TableItem } from '@/types'
 
 const MARGIN = 1.5
@@ -146,7 +147,11 @@ export default function RoomCanvas({ interactive = true, svgRef: externalRef, fo
     const abs = computeAbsoluteSeatPositions(table, guests)
     const seat = abs.find((s) => s.index === seatIndex)
     if (!seat || !seat.guest) return
-    setHoverTooltip({ tableId, seatIndex, text: seat.guest.fullName })
+    setHoverTooltip({
+      tableId,
+      seatIndex,
+      text: hasDietary(seat.guest.dietary) ? `${seat.guest.fullName} · ${formatDietary(seat.guest.dietary)}` : seat.guest.fullName
+    })
   }, [tables, guests])
 
   const handleSeatHoverEnd = useCallback(() => {

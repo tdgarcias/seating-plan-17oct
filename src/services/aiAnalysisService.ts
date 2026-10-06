@@ -1,3 +1,4 @@
+import { formatDietary, hasDietary } from '@/utils/dietary'
 import type { Guest, RoomFeature, Scenario } from '@/types'
 
 /**
@@ -74,7 +75,7 @@ function buildPrompt(scenario: Scenario, guests: Guest[], coupleNames: string): 
     const occupants = assigned.filter((g) => g.tableId === table.id)
     const guestLines = occupants.map((g) => {
       const tags = [g.isCouple ? 'NOVIOS' : null, g.role || null, g.group || null].filter(Boolean).join(', ')
-      return `    - ${g.fullName}${tags ? ` (${tags})` : ''}${g.dietary ? ` · dieta: ${g.dietary}` : ''}${g.notes ? ` · notas: ${g.notes}` : ''}`
+      return `    - ${g.fullName}${tags ? ` (${tags})` : ''}${hasDietary(g.dietary) ? ` · dieta: ${formatDietary(g.dietary)}` : ''}${g.notes ? ` · notas: ${g.notes}` : ''}`
     }).join('\n')
     return `- ${table.name} (${table.type === 'round' ? 'redonda' : 'rectangular'}, posición x=${table.x.toFixed(1)}m y=${table.y.toFixed(1)}m, ${occupants.length}/${table.capacity} ocupadas):\n${guestLines || '    (vacía)'}`
   }).join('\n\n')

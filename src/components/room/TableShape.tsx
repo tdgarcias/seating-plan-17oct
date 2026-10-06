@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react'
 import type { Guest, TableItem } from '@/types'
 import { computeSeatPositions } from '@/utils/geometry'
+import { hasDietary, isSevere } from '@/utils/dietary'
 
 interface TableShapeProps {
   table: TableItem
@@ -135,8 +136,14 @@ export default function TableShape({
               className={`seat-label ${seat.guest.isCouple ? 'is-couple' : ''} ${showFullNames ? 'is-full-name' : ''}`}
               textAnchor="middle" dy="0.065" transform={`rotate(${-table.rotation})`}
             >
-              {showFullNames ? `${initials(seat.guest.fullName)} ${seat.guest.fullName}` : initials(seat.guest.fullName)}
+              {showFullNames ? seat.guest.fullName : initials(seat.guest.fullName)}
             </text>
+          )}
+          {seat.guest && hasDietary(seat.guest.dietary) && (
+            <g className={`seat-diet-marker ${isSevere(seat.guest.dietary) ? 'is-severe' : ''}`} transform="translate(0.15 -0.15)">
+              <circle r={0.075} />
+              <text textAnchor="middle" dy="0.03" transform={`rotate(${-table.rotation})`}>!</text>
+            </g>
           )}
         </g>
       ))}

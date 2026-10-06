@@ -59,7 +59,7 @@ export default function ExportModal({ onClose }: ExportModalProps) {
         <div className="flex-col gap-3">
           <label className="checkbox-row">
             <input type="checkbox" checked={fullNames} onChange={(e) => setFullNames(e.target.checked)} />
-            Mostrar nombre completo del invitado (en vez de iniciales)
+            Mostrar nombre completo del invitado (sin iniciales)
           </label>
 
           <div className="field">

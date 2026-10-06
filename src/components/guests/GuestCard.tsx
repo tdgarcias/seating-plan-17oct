@@ -1,4 +1,5 @@
 import type { Guest } from '@/types'
+import DietaryBadge from '@/components/dietary/DietaryBadge'
 
 interface GuestCardProps {
   guest: Guest
@@ -38,6 +39,7 @@ export default function GuestCard({ guest, selected, tableName, onToggleSelect, 
           {guest.role && <span className="text-muted text-sm truncate">{guest.role}</span>}
           {!guest.role && guest.group && <span className="text-muted text-sm truncate">{guest.group}</span>}
           {guest.companions > 0 && <span className="chip chip-neutral">+{guest.companions}</span>}
+          <DietaryBadge dietary={guest.dietary} />
         </div>
       </div>
       <div className="guest-card-side">

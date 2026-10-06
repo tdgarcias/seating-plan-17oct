@@ -1,5 +1,6 @@
 import type { ConfirmationStatus, Guest, GuestGroup } from '@/types'
 import { createId } from '@/utils/id'
+import { parseDietaryText } from '@/utils/dietary'
 
 const FIRST_NAMES = [
   'Joan', 'Maria', 'Antoni', 'Catalina', 'Miquel', 'Francesca', 'Bartomeu', 'Margalida',
@@ -49,7 +50,7 @@ export function generateDemoGuests(count = 50): Guest[] {
       companions: i % 9 === 0 ? 1 : 0,
       status: pick(STATUSES, i * 5 + 3),
       notes: i % 13 === 0 ? 'Silla adaptada necesaria' : '',
-      dietary: pick(DIETARY, i * 2 + 1),
+      dietary: parseDietaryText(pick(DIETARY, i * 2 + 1)),
       role: pick(ROLES, i * 4 + 1),
       isCouple: false,
       tableId: null,

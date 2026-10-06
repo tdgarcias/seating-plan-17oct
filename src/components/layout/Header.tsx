@@ -5,6 +5,7 @@ import ScenarioBar from '@/components/scenarios/ScenarioBar'
 import { downloadProjectFile, readProjectFile } from '@/services/storageService'
 import { exportGuestsCsv, exportScenarioJson, printSeatingPlan } from '@/services/exportService'
 import ExportModal from '@/components/export/ExportModal'
+import PrintA4Modal from '@/components/export/PrintA4Modal'
 
 const TABS: { id: ViewMode; label: string }[] = [
   { id: 'mapa', label: 'Mapa' },
@@ -26,6 +27,7 @@ export default function Header() {
   const scenario = useActiveScenario()
   const [exportOpen, setExportOpen] = useState(false)
   const [imageExportOpen, setImageExportOpen] = useState(false)
+  const [printA4Open, setPrintA4Open] = useState(false)
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -75,12 +77,19 @@ export default function Header() {
           🔤 {scenario.room.showFullSeatNames ? 'Nombres completos' : 'Solo iniciales'}
         </button>
 
+        <button className="btn btn-primary btn-sm" title="PDF A4 con nombres completos y alergias" onClick={() => setPrintA4Open(true)}>
+          🖨 Imprimir A4
+        </button>
+
         <div className="app-header-export">
           <button className="btn btn-secondary btn-sm" onClick={() => setExportOpen((v) => !v)}>
             Exportar ▾
           </button>
           {exportOpen && (
             <div className="dropdown-menu" onMouseLeave={() => setExportOpen(false)}>
+              <button className="dropdown-highlight" onClick={() => { setPrintA4Open(true); setExportOpen(false) }}>
+                🖨 Imprimir A4 (wedding planner / catering)…
+              </button>
               <button onClick={() => { setImageExportOpen(true); setExportOpen(false) }}>
                 Imagen / PDF del plano…
               </button>
@@ -109,6 +118,7 @@ export default function Header() {
       </div>
 
       {imageExportOpen && <ExportModal onClose={() => setImageExportOpen(false)} />}
+      {printA4Open && <PrintA4Modal onClose={() => setPrintA4Open(false)} />}
     </header>
   )
 }
