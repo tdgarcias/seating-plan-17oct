@@ -3,6 +3,7 @@ import Modal from '@/components/common/Modal'
 import { useProjectStore, useActiveScenario } from '@/store/useProjectStore'
 import { SUGGESTED_ROLES, type ConfirmationStatus } from '@/types'
 import DietaryEditor from '@/components/dietary/DietaryEditor'
+import GiftEditor from './GiftEditor'
 
 interface GuestDetailModalProps {
   guestId: string
@@ -36,6 +37,7 @@ export default function GuestDetailModal({ guestId, onClose }: GuestDetailModalP
     updateGuest(guest.id, {
       notes: draft.notes,
       dietary: draft.dietary,
+      gift: draft.gift,
       companions: draft.companions,
       group: draft.group,
       status: draft.status,
@@ -101,6 +103,11 @@ export default function GuestDetailModal({ guestId, onClose }: GuestDetailModalP
         <div className="field">
           <label>Alergias, intolerancias y dietas</label>
           <DietaryEditor value={draft.dietary} onChange={(dietary) => setDraft({ ...draft, dietary })} />
+        </div>
+
+        <div className="field">
+          <label>Regalo en la mesa</label>
+          <GiftEditor value={draft.gift} onChange={(gift) => setDraft({ ...draft, gift })} />
         </div>
 
         <div className="field">

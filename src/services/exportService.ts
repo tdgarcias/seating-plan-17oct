@@ -22,7 +22,7 @@ export function exportGuestsCsv(guests: Guest[], tables: TableItem[], filename =
   const tableName = new Map(tables.map((t) => [t.id, t.name]))
   const header = [
     'Nombre', 'Apellidos', 'Nombre completo', 'Grupo', 'Rol', 'Acompañantes',
-    'Estado', 'Notas', 'Restricciones alimentarias', 'Mesa', 'Asiento'
+    'Estado', 'Notas', 'Restricciones alimentarias', 'Regalo en mesa', 'Mesa', 'Asiento'
   ]
   const rows = guests.map((g) => [
     g.firstName,
@@ -34,6 +34,7 @@ export function exportGuestsCsv(guests: Guest[], tables: TableItem[], filename =
     g.status,
     g.notes,
     formatDietary(g.dietary),
+    g.gift ? g.gift.description || 'Sí' : '',
     g.tableId ? tableName.get(g.tableId) ?? '' : '',
     g.seatIndex !== null ? String(g.seatIndex + 1) : ''
   ])
@@ -57,7 +58,8 @@ export function exportScenarioJson(scenario: Scenario, guests: Guest[], filename
         asiento: g.seatIndex !== null ? g.seatIndex + 1 : null,
         ...(hasDietary(g.dietary)
           ? { alergias: dietaryAbbrs(g.dietary), restricciones: formatDietary(g.dietary), gravedad: g.dietary.severity }
-          : {})
+          : {}),
+        ...(g.gift ? { regalo: g.gift.description || 'sí' } : {})
       }))
     }))
   }

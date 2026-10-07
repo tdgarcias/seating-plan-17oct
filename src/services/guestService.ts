@@ -195,6 +195,7 @@ function buildGuest(
     })(),
     role,
     isCouple: detectIsCouple(notes, role),
+    gift: null,
     sourceRow: rowIdx + 2, // +2: fila 1 = cabecera, base 1 = igual que en la hoja
     tableId: null,
     seatIndex: null
@@ -290,7 +291,8 @@ export function mergePreservingAssignments(
       dietary = g.dietary
     }
 
-    return { ...g, id: prev.id, tableId: prev.tableId, seatIndex: prev.seatIndex, role, isCouple, dietary }
+    // el regalo solo se gestiona en la app: se conserva siempre
+    return { ...g, id: prev.id, tableId: prev.tableId, seatIndex: prev.seatIndex, role, isCouple, dietary, gift: prev.gift ?? null }
   })
   return { guests, dietaryConflicts }
 }

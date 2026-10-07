@@ -21,6 +21,7 @@ import { fetchGuestsFromUrl, mergePreservingAssignments, GuestServiceError } fro
 import { loadProject, saveProjectDebounced, backupStoredProject } from '@/services/storageService'
 import {
   DEFAULT_ROOM,
+  DEFAULT_SETTINGS,
   captureAssignments,
   sameAssignments,
   switchActiveScenario,
@@ -68,7 +69,7 @@ function freshProject(): Project {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     id: createId('project'),
-    settings: { coupleNames: 'Nuestra boda', weddingDate: '' },
+    settings: { ...DEFAULT_SETTINGS },
     scenarios: [scenario],
     activeScenarioId: scenario.id,
     guests: [],

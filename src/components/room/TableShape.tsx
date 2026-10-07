@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import type { Guest, TableItem } from '@/types'
 import { computeSeatPositions } from '@/utils/geometry'
-import { hasDietary, isSevere } from '@/utils/dietary'
+import { dietaryColors, hasDietary, isBaby, isSevere, GIFT_ICON } from '@/utils/dietary'
 
 interface TableShapeProps {
   table: TableItem
@@ -130,7 +130,12 @@ export default function TableShape({
             if (guestId) onDropGuestOnSeat(guestId, table.id, seat.index)
           }}
         >
-          <circle r={0.19} className="seat-dot" />
+          {seat.guest && isBaby(seat.guest.dietary) ? (
+            // bebé: trona en lugar de silla
+            <rect x={-0.19} y={-0.19} width={0.38} height={0.38} rx={0.06} className="seat-dot seat-highchair" />
+          ) : (
+            <circle r={0.19} className="seat-dot" />
+          )}
           {seat.guest && (
             <text
               className={`seat-label ${seat.guest.isCouple ? 'is-couple' : ''} ${showFullNames ? 'is-full-name' : ''}`}
@@ -141,9 +146,25 @@ export default function TableShape({
           )}
           {seat.guest && hasDietary(seat.guest.dietary) && (
             <g className={`seat-diet-marker ${isSevere(seat.guest.dietary) ? 'is-severe' : ''}`} transform="translate(0.15 -0.15)">
-              <circle r={0.075} />
-              <text textAnchor="middle" dy="0.03" transform={`rotate(${-table.rotation})`}>!</text>
+              {/* marca dividida con el color de cada categoría */}
+              {(() => {
+                const colors = dietaryColors(seat.guest.dietary)
+                if (colors.length <= 1) return <circle r={0.075} style={colors[0] ? { fill: colors[0] } : undefined} />
+                return colors.map((c, i) => {
+                  const a0 = (i / colors.length) * 2 * Math.PI - Math.PI / 2
+                  const a1 = ((i + 1) / colors.length) * 2 * Math.PI - Math.PI / 2
+                  const r = 0.075
+                  const large = a1 - a0 > Math.PI ? 1 : 0
+                  const d = `M0 0 L${r * Math.cos(a0)} ${r * Math.sin(a0)} A${r} ${r} 0 ${large} 1 ${r * Math.cos(a1)} ${r * Math.sin(a1)} Z`
+                  return <path key={i} d={d} style={{ fill: c }} />
+                })
+              })()}
             </g>
+          )}
+          {seat.guest?.gift && (
+            <text className="seat-gift-marker" x={-0.16} y={-0.12} textAnchor="middle" transform={`rotate(${-table.rotation} -0.16 -0.12)`}>
+              {GIFT_ICON}
+            </text>
           )}
         </g>
       ))}

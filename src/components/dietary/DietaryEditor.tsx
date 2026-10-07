@@ -30,6 +30,7 @@ export default function DietaryEditor({ value, onChange }: DietaryEditorProps) {
             key={a.code}
             type="button"
             className={`dietary-chip ${value.allergens.includes(a.code) ? 'is-on' : ''}`}
+            style={{ '--chip-color': a.color } as React.CSSProperties}
             onClick={() => toggleAllergen(a.code)}
             aria-pressed={value.allergens.includes(a.code)}
             title={a.label}
@@ -39,13 +40,14 @@ export default function DietaryEditor({ value, onChange }: DietaryEditorProps) {
         ))}
       </div>
 
-      <span className="dietary-editor-caption">Dietas y menús especiales</span>
+      <span className="dietary-editor-caption">Dietas y menús especiales · el bebé ocupa plaza con trona y no lleva menú</span>
       <div className="dietary-chips">
         {DIETS.map((d) => (
           <button
             key={d.code}
             type="button"
             className={`dietary-chip ${value.diets.includes(d.code) ? 'is-on' : ''}`}
+            style={{ '--chip-color': d.color } as React.CSSProperties}
             onClick={() => toggleDiet(d.code)}
             aria-pressed={value.diets.includes(d.code)}
           >

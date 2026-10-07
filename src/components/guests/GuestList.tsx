@@ -7,7 +7,7 @@ import Modal from '@/components/common/Modal'
 import DietarySummaryModal from '@/components/dietary/DietarySummaryModal'
 import { hasDietary } from '@/utils/dietary'
 
-type Filter = 'todos' | 'sin-asignar' | 'asignados' | 'restricciones'
+type Filter = 'todos' | 'sin-asignar' | 'asignados' | 'restricciones' | 'regalos'
 
 export default function GuestList() {
   const project = useProjectStore((s) => s.project)
@@ -33,6 +33,7 @@ export default function GuestList() {
   const [urlDraft, setUrlDraft] = useState(project.guestSheetUrl)
   const [dietSummaryOpen, setDietSummaryOpen] = useState(false)
   const dietaryCount = project.guests.filter((g) => g.status !== 'rechazado' && hasDietary(g.dietary)).length
+  const giftCount = project.guests.filter((g) => g.status !== 'rechazado' && g.gift).length
 
   const tableName = useMemo(() => new Map(scenario.tables.map((t) => [t.id, t.name])), [scenario.tables])
 
@@ -45,6 +46,7 @@ export default function GuestList() {
     if (filter === 'sin-asignar' && g.tableId) return false
     if (filter === 'asignados' && !g.tableId) return false
     if (filter === 'restricciones' && !hasDietary(g.dietary)) return false
+    if (filter === 'regalos' && !g.gift) return false
     return true
   })
 
@@ -101,6 +103,11 @@ export default function GuestList() {
       <button className="dietary-summary-link text-sm" onClick={() => setDietSummaryOpen(true)}>
         🍽 {dietaryCount} invitado(s) con alergias o dietas · ver resumen
       </button>
+      {giftCount > 0 && (
+        <button className="dietary-summary-link text-sm" onClick={() => setFilter('regalos')}>
+          🎁 {giftCount} regalo(s) en mesa · ver quién
+        </button>
+      )}
 
       <div className="sidebar-section">
         <input
@@ -127,6 +134,7 @@ export default function GuestList() {
           <button className={filter === 'sin-asignar' ? 'is-active' : ''} onClick={() => setFilter('sin-asignar')}>Sin mesa</button>
           <button className={filter === 'asignados' ? 'is-active' : ''} onClick={() => setFilter('asignados')}>Asignados</button>
           <button className={filter === 'restricciones' ? 'is-active' : ''} onClick={() => setFilter('restricciones')} title="Con alergias, intolerancias o dietas">Alergias</button>
+          <button className={filter === 'regalos' ? 'is-active' : ''} onClick={() => setFilter('regalos')} title="Con regalo en la mesa">🎁</button>
         </div>
       </div>
 

@@ -53,6 +53,7 @@ export function generateDemoGuests(count = 50): Guest[] {
       dietary: parseDietaryText(pick(DIETARY, i * 2 + 1)),
       role: pick(ROLES, i * 4 + 1),
       isCouple: false,
+      gift: null,
       tableId: null,
       seatIndex: null
     })

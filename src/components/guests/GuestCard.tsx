@@ -1,5 +1,6 @@
 import type { Guest } from '@/types'
 import DietaryBadge from '@/components/dietary/DietaryBadge'
+import { GIFT_ICON } from '@/utils/dietary'
 
 interface GuestCardProps {
   guest: Guest
@@ -40,6 +41,11 @@ export default function GuestCard({ guest, selected, tableName, onToggleSelect, 
           {!guest.role && guest.group && <span className="text-muted text-sm truncate">{guest.group}</span>}
           {guest.companions > 0 && <span className="chip chip-neutral">+{guest.companions}</span>}
           <DietaryBadge dietary={guest.dietary} />
+          {guest.gift && (
+            <span className="gift-badge" title={guest.gift.description ? `Regalo: ${guest.gift.description}` : 'Tiene regalo en la mesa'}>
+              {GIFT_ICON}
+            </span>
+          )}
         </div>
       </div>
       <div className="guest-card-side">

@@ -1,5 +1,38 @@
 # Cambios: escenarios independientes, alergias e impresión A4
 
+> Este zip es **acumulativo**: incluye también los cambios de la entrega anterior. Puedes aplicarlo tanto sobre el repositorio original como sobre la versión ya actualizada.
+
+## Novedades de esta versión (v3)
+
+- **Datos de la boda:**
+  - "Cati & Tomeu" sustituye a "Nuestra boda".
+  - Pulsando el nombre bajo "Seating Plan" se editan los novios, el lugar y la fecha.
+  - Los proyectos que tenían "Nuestra boda" se actualizan solos (Cati & Tomeu · Els Calderers · 17/10/2026).
+- **Pie de página de la impresión:** "Els Calderers · 17/10/2026" y el número de página. Se eliminan la frase "Plano con números de asiento…", la nota de las páginas por mesa y "Impreso el…".
+- **Novios en rojo** en todas las páginas: plano, páginas por mesa, catering y regalos. En el plano también llevan un aro rojo en el asiento.
+- **Un color fijo por categoría:**
+  - Todos los invitados con gluten se marcan en el mismo color, todos los vegetarianos en otro, etc.
+  - Junto al nombre aparece una píldora del color de la categoría, con la miniatura del mismo emoji de la app y su abreviatura.
+  - Si un invitado tiene varias restricciones, el **asiento se divide en sectores** con el color de cada una.
+  - La leyenda muestra miniatura, color y nombre.
+  - Las abreviaturas y el "(!)" se mantienen por si alguien imprime en blanco y negro.
+  - Las miniaturas se generan en el navegador con la fuente de emojis del sistema.
+- **Nuevas dietas:**
+  - Pescetariano.
+  - Bebé: ocupa plaza, pero en el plano su asiento se dibuja como **trona** (cuadrado) y no cuenta como menú en la hoja de catering. Se resume aparte por mesa ("2 bebés en trona, sin menú").
+- **Regalos en la mesa:**
+  - En la ficha del invitado: casilla "Tiene un regalo o detalle" y descripción.
+  - En la lista: 🎁 junto al nombre, filtro 🎁 y contador.
+  - En el plano: 🎁 junto al asiento.
+  - En la impresión: 🎁 junto al nombre y nueva **hoja de regalos** (mesa, asiento, invitado, regalo), con totales por mesa.
+  - El regalo solo se gestiona en la app: sincronizar con Google Sheets no lo borra.
+- Los CSV y JSON exportados incluyen el regalo.
+
+**Archivos nuevos en v3:** `src/components/settings/WeddingSettingsModal.tsx`, `src/components/guests/GiftEditor.tsx`, `src/utils/emojiIcons.ts`.
+
+---
+
+
 Copia el contenido de este zip en la raíz del repositorio, sobrescribiendo los archivos existentes, y haz commit. No hay dependencias nuevas, así que no hace falta `npm install`.
 
 ## 1. Escenarios independientes (bug corregido)

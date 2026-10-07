@@ -19,6 +19,8 @@ export interface Guest {
   notes: string
   /** Alergias, intolerancias y dietas especiales (estructurado). */
   dietary: DietaryInfo
+  /** Regalo o detalle que tendrá en su sitio. null si no tiene. */
+  gift: GiftInfo | null
   /** Rol del invitado respecto a los novios (familiar, amigo, compañero de trabajo...). Texto libre. */
   role: string
   /** True si este invitado ES uno de los novios (detectado en la hoja o marcado manualmente). */
@@ -39,7 +41,8 @@ export type AllergenCode =
   | 'gluten' | 'crustaceos' | 'huevo' | 'pescado' | 'cacahuete' | 'soja' | 'lacteos'
   | 'frutos_cascara' | 'apio' | 'mostaza' | 'sesamo' | 'sulfitos' | 'altramuces' | 'moluscos'
 
-export type DietCode = 'vegetariano' | 'vegano' | 'sin_cerdo' | 'halal' | 'kosher' | 'embarazada' | 'infantil'
+export type DietCode =
+  | 'vegetariano' | 'vegano' | 'pescetariano' | 'sin_cerdo' | 'halal' | 'kosher' | 'embarazada' | 'infantil' | 'bebe'
 
 export type DietarySeverity = 'alergia' | 'intolerancia' | 'preferencia'
 
@@ -51,6 +54,12 @@ export interface DietaryInfo {
   notes: string
   /** Último texto leído de la columna de alergias de Google Sheets (para detectar cambios). */
   sheetText?: string
+}
+
+/** Detalle o regalo que se deja en la mesa para un invitado (null = no tiene). */
+export interface GiftInfo {
+  /** Qué es el regalo ("ramo", "caja de ensaïmada"...). Puede ir vacío. */
+  description: string
 }
 
 export interface GuestGroup {
@@ -143,7 +152,10 @@ export interface Scenario {
 
 export interface ProjectSettings {
   coupleNames: string
+  /** Fecha de la boda en formato AAAA-MM-DD. */
   weddingDate: string
+  /** Lugar de celebración (aparece en el pie de las impresiones). */
+  venue: string
 }
 
 export interface Project {

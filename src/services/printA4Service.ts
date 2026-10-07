@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf'
 import type { Guest, RoomFeature, Scenario, TableItem } from '@/types'
 import { computeSeatPositions } from '@/utils/geometry'
-import { ALLERGENS, DIETS, dietaryAbbrs, hasDietary, isSevere, SEVERITIES } from '@/utils/dietary'
+import { ALLERGENS, DIETS, dietaryAbbrs, dietaryTags, hasDietary, isBaby, isSevere, SEVERITIES, GIFT_ICON, GIFT_COLOR } from '@/utils/dietary'
 
 /**
  * Impresión A4 para wedding planner y catering
@@ -27,8 +27,12 @@ export interface PrintOptions {
   tableDetail: 'auto' | 'always' | 'never'
   cateringSheet: boolean
   unassignedList: boolean
+  /** Hoja aparte con la lista de regalos por mesa y asiento. */
+  giftSheet: boolean
   title: string
   subtitle: string
+  /** Texto del pie de página (p. ej. "Els Calderers · 17/10/2026"). */
+  footer: string
 }
 
 export const DEFAULT_PRINT_OPTIONS: PrintOptions = {
@@ -39,14 +43,22 @@ export const DEFAULT_PRINT_OPTIONS: PrintOptions = {
   tableDetail: 'auto',
   cateringSheet: true,
   unassignedList: false,
+  giftSheet: true,
   title: '',
-  subtitle: ''
+  subtitle: '',
+  footer: ''
 }
 
 export interface PrintInput {
   scenario: Scenario
   /** Invitados con la mesa/asiento del escenario que se imprime. */
   guests: Guest[]
+  /**
+   * Miniaturas PNG (data URL) de los iconos, por código de categoría y 'gift'.
+   * En el navegador se generan con el mismo emoji que se ve en pantalla.
+   * Si falta alguna, se dibuja un círculo del color de la categoría.
+   */
+  icons?: Record<string, string>
 }
 
 export interface PrintReport {
@@ -69,6 +81,66 @@ const FOOTER_H = 7
 const SEVERE_MARK = '(!)'
 const INK = 30
 const SOFT = 110
+/** Rojo de los novios (igual que en la app). */
+const COUPLE_RGB: [number, number, number] = [179, 38, 30]
+
+/** Iconos del PDF en curso (se fijan al empezar buildSeatingPdf). */
+let ICONS: Record<string, string> = {}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '')
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+/** Mezcla un color con blanco (amount = proporción de color). */
+function tint(hex: string, amount: number): [number, number, number] {
+  const [r, g, b] = hexToRgb(hex)
+  return [Math.round(255 - (255 - r) * amount), Math.round(255 - (255 - g) * amount), Math.round(255 - (255 - b) * amount)]
+}
+
+function luminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex)
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+}
+
+/** Dibuja la miniatura de una categoría; si no hay imagen, un círculo de su color. */
+function drawIcon(pdf: jsPDF, code: string, color: string, x: number, y: number, size: number) {
+  const img = ICONS[code]
+  if (img) {
+    try {
+      pdf.addImage(img, 'PNG', x, y, size, size, `icon-${code}`, 'FAST')
+      return
+    } catch {
+      /* imagen no válida: se usa el círculo */
+    }
+  }
+  pdf.setFillColor(...hexToRgb(color))
+  pdf.circle(x + size / 2, y + size / 2, size * 0.4, 'F')
+}
+
+/** Disco dividido en sectores de colores (asiento con varias categorías). */
+function drawPie(pdf: jsPDF, cx: number, cy: number, r: number, colors: string[]) {
+  if (colors.length === 1) {
+    pdf.setFillColor(...hexToRgb(colors[0]))
+    pdf.circle(cx, cy, r, 'F')
+    return
+  }
+  const n = colors.length
+  colors.forEach((c, i) => {
+    const a0 = (i / n) * 2 * Math.PI - Math.PI / 2
+    const a1 = ((i + 1) / n) * 2 * Math.PI - Math.PI / 2
+    const steps = Math.max(4, Math.ceil(24 / n))
+    const pts: [number, number][] = [[cx, cy]]
+    for (let k = 0; k <= steps; k++) {
+      const a = a0 + ((a1 - a0) * k) / steps
+      pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)])
+    }
+    const segs = pts.slice(1).map((p, k) => [p[0] - pts[k][0], p[1] - pts[k][1]])
+    pdf.setFillColor(...hexToRgb(c))
+    pdf.lines(segs, pts[0][0], pts[0][1], [1, 1], 'F', true)
+  })
+}
 
 // ---------------------------------------------------------------- utilidades
 
@@ -195,8 +267,18 @@ function tableBox(vt: ViewTable): Box {
 
 // ---------------------------------------------------------------- etiquetas
 
+interface TagItem {
+  code: string
+  text: string
+  color: string
+}
+
+type LabelLine =
+  | { kind: 'text'; text: string; bold: boolean; sizePt: number; couple: boolean }
+  | { kind: 'tags'; items: TagItem[]; severe: boolean; sizePt: number }
+
 interface LabelSpec {
-  lines: { text: string; bold: boolean; sizePt: number }[]
+  lines: LabelLine[]
 }
 
 interface PlacedLabel {
@@ -210,14 +292,23 @@ interface PlacedLabel {
   vdir: number
 }
 
+function guestTagItems(guest: Guest, showDietary: boolean): TagItem[] {
+  const items: TagItem[] = []
+  if (showDietary) {
+    dietaryTags(guest.dietary).forEach((t) => items.push({ code: t.code, text: pdfText(t.abbr), color: t.color }))
+    if (hasDietary(guest.dietary) && items.length === 0) items.push({ code: 'nota', text: 'VER NOTA', color: '#888888' })
+  }
+  if (guest.gift) items.push({ code: 'gift', text: '', color: GIFT_COLOR })
+  return items
+}
+
 function labelSpec(guest: Guest, fontPt: number, twoLines: boolean, showDietary: boolean): LabelSpec {
   const name = pdfText(guest.fullName)
   const nameLines = twoLines ? splitName(name) : [name]
-  const lines = nameLines.map((t) => ({ text: t, bold: guest.isCouple, sizePt: fontPt }))
-  if (showDietary && hasDietary(guest.dietary)) {
-    const abbrs = dietaryAbbrs(guest.dietary)
-    const tag = (isSevere(guest.dietary) ? `${SEVERE_MARK} ` : '') + (abbrs.length ? abbrs.join('·') : 'VER NOTA')
-    lines.push({ text: pdfText(tag), bold: true, sizePt: Math.max(MIN_FONT_PT, fontPt * 0.9) })
+  const lines: LabelLine[] = nameLines.map((t) => ({ kind: 'text', text: t, bold: guest.isCouple, sizePt: fontPt, couple: guest.isCouple }))
+  const items = guestTagItems(guest, showDietary)
+  if (items.length) {
+    lines.push({ kind: 'tags', items, severe: showDietary && isSevere(guest.dietary), sizePt: Math.max(MIN_FONT_PT, fontPt * 0.85) })
   }
   return { lines }
 }
@@ -226,14 +317,42 @@ function lineHeight(pt: number) {
   return pt * PT_TO_MM * 1.12
 }
 
+/** Alto de la fila de etiquetas (algo mayor que el texto para que quepa la miniatura). */
+function tagLineHeight(pt: number) {
+  return pt * PT_TO_MM * 1.45
+}
+
+function lineH(line: LabelLine) {
+  return line.kind === 'tags' ? tagLineHeight(line.sizePt) : lineHeight(line.sizePt)
+}
+
+const CHIP_PAD = 0.5
+const CHIP_GAP = 0.6
+
+/** Ancho de cada etiqueta (icono + abreviatura) y del conjunto. */
+function measureTags(pdf: jsPDF, line: Extract<LabelLine, { kind: 'tags' }>): { widths: number[]; severeW: number; total: number } {
+  const h = tagLineHeight(line.sizePt)
+  const icon = h - 0.6
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(line.sizePt)
+  const widths = line.items.map((it) => CHIP_PAD * 2 + icon + (it.text ? 0.4 + pdf.getTextWidth(it.text) : 0))
+  const severeW = line.severe ? pdf.getTextWidth(SEVERE_MARK) + CHIP_GAP : 0
+  const total = severeW + widths.reduce((a, b) => a + b, 0) + CHIP_GAP * Math.max(0, widths.length - 1)
+  return { widths, severeW, total }
+}
+
 function measureSpec(pdf: jsPDF, spec: LabelSpec): { w: number; h: number } {
   let w = 0
   let h = 0
   spec.lines.forEach((l) => {
-    pdf.setFont('helvetica', l.bold ? 'bold' : 'normal')
-    pdf.setFontSize(l.sizePt)
-    w = Math.max(w, pdf.getTextWidth(l.text))
-    h += lineHeight(l.sizePt)
+    if (l.kind === 'text') {
+      pdf.setFont('helvetica', l.bold ? 'bold' : 'normal')
+      pdf.setFontSize(l.sizePt)
+      w = Math.max(w, pdf.getTextWidth(l.text))
+    } else {
+      w = Math.max(w, measureTags(pdf, l).total)
+    }
+    h += lineH(l)
   })
   return { w, h }
 }
@@ -408,54 +527,155 @@ function drawView(pdf: jsPDF, view: View, layout: Layout, opts: { names: boolean
     }
   })
 
-  // asientos
+  // asientos: color de cada categoría (dividido si hay varias), trona para bebés, aro rojo para los novios
   view.seats.forEach((s) => {
     const p = P(s.x, s.y)
-    const severe = s.guest && opts.showDietary && isSevere(s.guest.dietary)
-    const diet = s.guest && opts.showDietary && hasDietary(s.guest.dietary)
-    pdf.setLineWidth(severe ? 0.5 : 0.25)
-    pdf.setDrawColor(severe ? 0 : 90)
-    if (s.guest) pdf.setFillColor(diet ? 40 : 255, diet ? 40 : 255, diet ? 40 : 255)
-    else pdf.setFillColor(255, 255, 255)
-    pdf.circle(p.x, p.y, dotR, s.guest ? 'FD' : 'D')
+    const colors = s.guest && opts.showDietary ? dietaryTags(s.guest.dietary).map((t) => t.color) : []
+    const baby = !!s.guest && isBaby(s.guest.dietary)
+    if (baby) {
+      // trona: cuadrado redondeado (con franjas si tiene más categorías)
+      const side = dotR * 1.9
+      const x0 = p.x - side / 2
+      const y0 = p.y - side / 2
+      const fills = colors.length ? colors : ['#FFFFFF']
+      fills.forEach((c, i) => {
+        pdf.setFillColor(...hexToRgb(c))
+        pdf.rect(x0 + (side * i) / fills.length, y0, side / fills.length, side, 'F')
+      })
+      pdf.setDrawColor(60)
+      pdf.setLineWidth(0.35)
+      pdf.roundedRect(x0, y0, side, side, 0.5, 0.5, 'D')
+    } else {
+      if (colors.length) drawPie(pdf, p.x, p.y, dotR, colors)
+      else {
+        pdf.setFillColor(255, 255, 255)
+        pdf.circle(p.x, p.y, dotR, 'F')
+      }
+      const severe = s.guest && opts.showDietary && isSevere(s.guest.dietary)
+      pdf.setLineWidth(severe ? 0.5 : 0.25)
+      pdf.setDrawColor(severe ? 0 : s.guest ? 90 : 160)
+      pdf.circle(p.x, p.y, dotR, 'D')
+    }
+    if (s.guest?.isCouple) {
+      pdf.setDrawColor(...COUPLE_RGB)
+      pdf.setLineWidth(0.55)
+      pdf.circle(p.x, p.y, dotR + 0.45, 'D')
+    }
     if (opts.seatNumbers) {
       const n = String(s.index + 1)
       const size = Math.min(6, Math.max(3.6, (dotR * 2 * 0.62) / PT_TO_MM / (n.length > 1 ? 1.15 : 0.9)))
+      const avgLum = colors.length ? colors.reduce((a, c) => a + luminance(c), 0) / colors.length : 1
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(size)
-      pdf.setTextColor(diet ? 255 : s.guest ? INK : 160)
+      if (avgLum < 0.5) pdf.setTextColor(255, 255, 255)
+      else pdf.setTextColor(s.guest ? INK : 160)
       pdf.text(n, p.x, p.y + size * PT_TO_MM * 0.35, { align: 'center' })
+    }
+    // en el plano sin nombres, el regalo se marca junto al asiento
+    if (!opts.names && s.guest?.gift) {
+      const size = Math.max(2.2, dotR * 1.4)
+      const gx = p.x + s.dx * (dotR + size * 0.75) - size / 2
+      const gy = p.y + s.dy * (dotR + size * 0.75) - size / 2
+      drawIcon(pdf, 'gift', GIFT_COLOR, gx, gy, size)
     }
   })
 
   if (!opts.names) return
 
-  // nombres (texto en negro: legible en impresión B/N; novios en negrita)
+  // nombres (novios en rojo) y fila de etiquetas con icono + color de cada categoría
   layout.labels.forEach((l) => {
     const p = P(l.seat.x, l.seat.y)
-    const heights = l.spec.lines.map((ln) => lineHeight(ln.sizePt))
-    pdf.setTextColor(INK)
+    const total = measureSpec(pdf, l.spec)
     if (!l.rotated) {
       let y = p.y + l.rel.y0
-      l.spec.lines.forEach((ln, i) => {
-        pdf.setFont('helvetica', ln.bold ? 'bold' : 'normal')
-        pdf.setFontSize(ln.sizePt)
-        const x = l.align === 'left' ? p.x + l.rel.x0 : l.align === 'right' ? p.x + l.rel.x1 : p.x
-        pdf.text(ln.text, x, y + heights[i] * 0.78, { align: l.align })
-        y += heights[i]
+      l.spec.lines.forEach((ln) => {
+        const h = lineH(ln)
+        if (ln.kind === 'text') {
+          pdf.setFont('helvetica', ln.bold ? 'bold' : 'normal')
+          pdf.setFontSize(ln.sizePt)
+          if (ln.couple) pdf.setTextColor(...COUPLE_RGB)
+          else pdf.setTextColor(INK)
+          const x = l.align === 'left' ? p.x + l.rel.x0 : l.align === 'right' ? p.x + l.rel.x1 : p.x
+          pdf.text(ln.text, x, y + h * 0.78, { align: l.align })
+        } else {
+          const m = measureTags(pdf, ln)
+          let x = l.align === 'left' ? p.x + l.rel.x0 : l.align === 'right' ? p.x + l.rel.x1 - m.total : p.x - m.total / 2
+          drawTagRun(pdf, ln, m, x, y, h, false)
+        }
+        y += h
       })
     } else {
       // Texto girado 90°: la línea base sube y los glifos quedan a su izquierda.
       // Encima de la mesa empieza junto al asiento y sube; debajo termina junto al asiento.
       let x = p.x + l.rel.x0
-      l.spec.lines.forEach((ln, i) => {
-        pdf.setFont('helvetica', ln.bold ? 'bold' : 'normal')
-        pdf.setFontSize(ln.sizePt)
-        const w = pdf.getTextWidth(ln.text)
-        const anchorY = l.vdir < 0 ? p.y + l.rel.y1 : p.y + l.rel.y0 + w
-        pdf.text(ln.text, x + heights[i] * 0.78, anchorY, { angle: 90 })
-        x += heights[i]
+      l.spec.lines.forEach((ln) => {
+        const h = lineH(ln)
+        if (ln.kind === 'text') {
+          pdf.setFont('helvetica', ln.bold ? 'bold' : 'normal')
+          pdf.setFontSize(ln.sizePt)
+          if (ln.couple) pdf.setTextColor(...COUPLE_RGB)
+          else pdf.setTextColor(INK)
+          const w = pdf.getTextWidth(ln.text)
+          const anchorY = l.vdir < 0 ? p.y + l.rel.y1 : p.y + l.rel.y0 + w
+          pdf.text(ln.text, x + h * 0.78, anchorY, { angle: 90 })
+        } else {
+          const m = measureTags(pdf, ln)
+          const bottom = l.vdir < 0 ? p.y + l.rel.y1 : p.y + l.rel.y0 + m.total
+          drawTagRun(pdf, ln, m, x, bottom, h, true)
+        }
+        x += h
       })
+    }
+    void total
+  })
+}
+
+/**
+ * Dibuja la fila de etiquetas: "(!)" si es alergia grave y, por cada categoría, una píldora
+ * del color de la categoría con su miniatura y la abreviatura.
+ * Horizontal: (x, y) es la esquina superior izquierda. Girada: x es el borde izquierdo y y el extremo inferior.
+ */
+function drawTagRun(
+  pdf: jsPDF,
+  line: Extract<LabelLine, { kind: 'tags' }>,
+  m: { widths: number[]; severeW: number; total: number },
+  x: number,
+  y: number,
+  h: number,
+  rotated: boolean
+) {
+  const icon = h - 0.6
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(line.sizePt)
+  let cursor = rotated ? y : x
+  if (line.severe) {
+    pdf.setTextColor(0)
+    if (rotated) pdf.text(SEVERE_MARK, x + h * 0.72, cursor, { angle: 90 })
+    else pdf.text(SEVERE_MARK, cursor, y + h * 0.72)
+    cursor += rotated ? -m.severeW : m.severeW
+  }
+  line.items.forEach((it, i) => {
+    const w = m.widths[i]
+    pdf.setFillColor(...tint(it.color, 0.32))
+    pdf.setDrawColor(...hexToRgb(it.color))
+    pdf.setLineWidth(0.25)
+    if (rotated) {
+      const top = cursor - w
+      pdf.roundedRect(x + 0.1, top, h - 0.2, w, 0.8, 0.8, 'FD')
+      drawIcon(pdf, it.code, it.color, x + 0.3, cursor - CHIP_PAD - icon, icon)
+      if (it.text) {
+        pdf.setTextColor(INK)
+        pdf.text(it.text, x + h * 0.74, cursor - CHIP_PAD - icon - 0.4, { angle: 90 })
+      }
+      cursor -= w + CHIP_GAP
+    } else {
+      pdf.roundedRect(cursor, y + 0.1, w, h - 0.2, 0.8, 0.8, 'FD')
+      drawIcon(pdf, it.code, it.color, cursor + CHIP_PAD, y + 0.3, icon)
+      if (it.text) {
+        pdf.setTextColor(INK)
+        pdf.text(it.text, cursor + CHIP_PAD + icon + 0.4, y + h * 0.72)
+      }
+      cursor += w + CHIP_GAP
     }
   })
 }
@@ -510,53 +730,97 @@ function newPage(pdf: jsPDF, first: { value: boolean }, orientation: 'portrait' 
   }
 }
 
-/** Abreviaturas usadas por los invitados dados, para la leyenda. */
-function legendItems(guests: Guest[]) {
-  const items: { abbr: string; label: string }[] = []
-  ALLERGENS.forEach((a) => {
-    if (guests.some((g) => g.dietary.allergens.includes(a.code))) items.push({ abbr: a.abbr, label: a.label })
-  })
-  DIETS.forEach((d) => {
-    if (guests.some((g) => g.dietary.diets.includes(d.code))) items.push({ abbr: d.abbr, label: d.label })
-  })
-  if (guests.some((g) => hasDietary(g.dietary) && g.dietary.allergens.length === 0 && g.dietary.diets.length === 0)) {
-    items.push({ abbr: 'VER NOTA', label: 'ver hoja de catering' })
+interface LegendItem { code: string; color: string; text: string }
+
+/** Categorías usadas por los invitados dados (más regalo), para la leyenda. */
+function legendItems(guests: Guest[], showDietary: boolean): LegendItem[] {
+  const items: LegendItem[] = []
+  if (showDietary) {
+    ALLERGENS.forEach((a) => {
+      if (guests.some((g) => g.dietary.allergens.includes(a.code))) items.push({ code: a.code, color: a.color, text: pdfText(`${a.abbr} ${a.label}`) })
+    })
+    DIETS.forEach((d) => {
+      if (guests.some((g) => g.dietary.diets.includes(d.code))) {
+        items.push({ code: d.code, color: d.color, text: pdfText(d.code === 'bebe' ? `${d.abbr} Bebé (trona, sin menú)` : `${d.abbr} ${d.label}`) })
+      }
+    })
+    if (guests.some((g) => hasDietary(g.dietary) && g.dietary.allergens.length === 0 && g.dietary.diets.length === 0)) {
+      items.push({ code: 'nota', color: '#888888', text: 'VER NOTA en la hoja de catering' })
+    }
   }
+  if (guests.some((g) => g.gift)) items.push({ code: 'gift', color: GIFT_COLOR, text: 'Regalo en la mesa' })
   return items
 }
 
-function legendHeight(pdf: jsPDF, guests: Guest[], show: boolean): number {
+const LEGEND_ROW = 5
+const LEGEND_FS = 7
+
+/** Reparte los elementos de la leyenda en filas que caben en el ancho disponible. */
+function legendRows(pdf: jsPDF, items: LegendItem[], width: number, severeNote: boolean): { rows: (LegendItem | 'severe')[][] } {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(LEGEND_FS)
+  const all: (LegendItem | 'severe')[] = [...(severeNote ? (['severe'] as const) : []), ...items]
+  const rows: (LegendItem | 'severe')[][] = [[]]
+  let used = 0
+  all.forEach((it) => {
+    const w = legendItemWidth(pdf, it)
+    if (used + w > width && rows[rows.length - 1].length) {
+      rows.push([])
+      used = 0
+    }
+    rows[rows.length - 1].push(it)
+    used += w
+  })
+  return { rows }
+}
+
+function legendItemWidth(pdf: jsPDF, it: LegendItem | 'severe'): number {
+  if (it === 'severe') return pdf.getTextWidth(`${SEVERE_MARK} = alergia grave (evitar trazas)`) + 6
+  return 3.6 + 1 + pdf.getTextWidth(it.text) + 5
+}
+
+function legendHeight(pdf: jsPDF, guests: Guest[], show: boolean, showDietary = true): number {
   if (!show) return 0
-  const items = legendItems(guests)
-  if (!items.length && !guests.some((g) => isSevere(g.dietary))) return 0
+  const items = legendItems(guests, showDietary)
+  const severe = showDietary && guests.some((g) => isSevere(g.dietary))
+  if (!items.length && !severe) return 0
   const { w } = pageSize(pdf)
-  const text = legendText(guests)
-  pdf.setFontSize(7)
-  const lines = pdf.splitTextToSize(text, w - MARGIN * 2 - 4)
-  return lines.length * lineHeight(7) + 5
+  return legendRows(pdf, items, w - MARGIN * 2 - 4, severe).rows.length * LEGEND_ROW + 3
 }
 
-function legendText(guests: Guest[]): string {
-  const items = legendItems(guests)
-  const parts = items.map((i) => `${i.abbr} = ${i.label}`)
-  parts.unshift(`${SEVERE_MARK} = alergia grave (evitar también trazas) · asiento relleno = tiene restricción`)
-  return pdfText(parts.join('   ·   '))
-}
-
-function drawLegend(pdf: jsPDF, guests: Guest[]) {
+function drawLegend(pdf: jsPDF, guests: Guest[], showDietary = true) {
   const { w, h } = pageSize(pdf)
-  const height = legendHeight(pdf, guests, true)
+  const height = legendHeight(pdf, guests, true, showDietary)
   if (!height) return
+  const items = legendItems(guests, showDietary)
+  const severe = showDietary && guests.some((g) => isSevere(g.dietary))
   const y0 = h - MARGIN - FOOTER_H - height + 1
   pdf.setDrawColor(190)
   pdf.setFillColor(248, 246, 241)
   pdf.setLineWidth(0.25)
   pdf.rect(MARGIN, y0, w - MARGIN * 2, height - 1.5, 'FD')
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(7)
-  pdf.setTextColor(INK)
-  const lines = pdf.splitTextToSize(legendText(guests), w - MARGIN * 2 - 4)
-  pdf.text(lines, MARGIN + 2, y0 + 3.6)
+  const { rows } = legendRows(pdf, items, w - MARGIN * 2 - 4, severe)
+  rows.forEach((row, r) => {
+    let x = MARGIN + 2
+    const y = y0 + 1.2 + r * LEGEND_ROW
+    row.forEach((it) => {
+      pdf.setFontSize(LEGEND_FS)
+      if (it === 'severe') {
+        pdf.setFont('helvetica', 'bold')
+        pdf.setTextColor(0)
+        pdf.text(`${SEVERE_MARK} = alergia grave (evitar trazas)`, x, y + 2.9)
+      } else {
+        pdf.setFillColor(...tint(it.color, 0.32))
+        pdf.setDrawColor(...hexToRgb(it.color))
+        pdf.roundedRect(x - 0.3, y + 0.1, 3.6 + 1.3 + pdf.getTextWidth(it.text) + 0.6, 3.8, 0.8, 0.8, 'FD')
+        drawIcon(pdf, it.code, it.color, x, y + 0.3, 3.4)
+        pdf.setFont('helvetica', 'bold')
+        pdf.setTextColor(INK)
+        pdf.text(it.text, x + 3.6 + 1, y + 2.9)
+      }
+      x += legendItemWidth(pdf, it)
+    })
+  })
 }
 
 function chooseOrientation(option: PrintOrientation, wMeters: number, hMeters: number): 'portrait' | 'landscape' {
@@ -568,6 +832,7 @@ function chooseOrientation(option: PrintOrientation, wMeters: number, hMeters: n
 
 export function buildSeatingPdf(input: PrintInput, options: PrintOptions): { pdf: jsPDF; report: PrintReport } {
   const { scenario, guests } = input
+  ICONS = input.icons ?? {}
   const report: PrintReport = { pages: 0, overviewShowsNames: false, overviewFontPt: null, detailTables: 0, splitTables: [], warnings: [] }
   const seatedGuests = guests.filter((g) => g.tableId && scenario.tables.some((t) => t.id === g.tableId))
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true })
@@ -589,7 +854,7 @@ export function buildSeatingPdf(input: PrintInput, options: PrintOptions): { pdf
     room: { w: room.widthMeters, h: room.heightMeters },
     extent: { x0: 0, y0: 0, x1: room.widthMeters, y1: room.heightMeters }
   }
-  const legendReserve = options.showDietary ? legendHeight(pdf, seatedGuests, options.includeLegend) : 0
+  const legendReserve = legendHeight(pdf, seatedGuests, options.includeLegend, options.showDietary)
   const frame = contentFrame(pdf, legendReserve)
   const withNames = options.tableDetail === 'always' ? null : bestLayout(pdf, overview, frame, options.showDietary)
   const needDetail = options.tableDetail === 'always' || (options.tableDetail === 'auto' && !withNames)
@@ -604,18 +869,8 @@ export function buildSeatingPdf(input: PrintInput, options: PrintOptions): { pdf
     if (options.tableDetail === 'never') {
       report.warnings.push('Los nombres no caben legibles (≥ 6,5 pt) en el plano general y has desactivado las páginas por mesa: el plano solo muestra números de asiento.')
     }
-    pdf.setFont('helvetica', 'italic')
-    pdf.setFontSize(8)
-    pdf.setTextColor(SOFT)
-    pdf.text(
-      needDetail
-        ? 'Plano con números de asiento. Los nombres completos están en las páginas siguientes (una por mesa).'
-        : 'Plano con números de asiento.',
-      frame.x0,
-      frame.y0 - 1
-    )
   }
-  if (options.showDietary && options.includeLegend) drawLegend(pdf, seatedGuests)
+  if (options.includeLegend) drawLegend(pdf, seatedGuests, options.showDietary)
 
   // ---------- 2. detalle por mesa
   if (needDetail) {
@@ -643,7 +898,7 @@ export function buildSeatingPdf(input: PrintInput, options: PrintOptions): { pdf
         })
         // medir en una página de prueba con la orientación elegida
         const probe = new jsPDF({ unit: 'mm', format: 'a4', orientation: orient })
-        const f = contentFrame(probe, options.showDietary && options.includeLegend ? legendHeight(probe, occupants, true) : 0)
+        const f = contentFrame(probe, options.includeLegend ? legendHeight(probe, occupants, true, options.showDietary) : 0)
         const layouts = views.map((v) => bestLayout(probe, v, f, options.showDietary))
         if (layouts.every((l) => l)) {
           chosen = { views, layouts: layouts as Layout[] }
@@ -664,16 +919,10 @@ export function buildSeatingPdf(input: PrintInput, options: PrintOptions): { pdf
         const range = chosen!.views.length > 1 ? ` · parte ${i + 1}/${chosen!.views.length} (asientos ${compactRanges(seatsHere)})` : ''
         drawHeader(ctx, `${table.name}${range}`)
         const legendGuests = view.seats.filter((s) => s.guest).map((s) => s.guest!)
-        const f = contentFrame(pdf, options.showDietary && options.includeLegend ? legendHeight(pdf, legendGuests, true) : 0)
+        const f = contentFrame(pdf, options.includeLegend ? legendHeight(pdf, legendGuests, true, options.showDietary) : 0)
         const layout = bestLayout(pdf, view, f, options.showDietary) ?? chosen!.layouts[i]
         drawView(pdf, view, layout, { names: true, seatNumbers: options.seatNumbers, showDietary: options.showDietary, tableLabels: true })
-        pdf.setFont('helvetica', 'normal')
-        pdf.setFontSize(7.5)
-        pdf.setTextColor(SOFT)
-        const occ = view.seats.filter((s) => s.guest).length
-        const note = `${occ} invitado(s) en esta página · orientación igual que en el plano general${chosen!.views.length > 1 && i < chosen!.views.length - 1 ? ' · continúa en la página siguiente' : ''}`
-        pdf.text(pdfText(note), f.x0, f.y0 - 1)
-        if (options.showDietary && options.includeLegend) drawLegend(pdf, legendGuests)
+        if (options.includeLegend) drawLegend(pdf, legendGuests, options.showDietary)
       })
     })
   }
@@ -681,7 +930,10 @@ export function buildSeatingPdf(input: PrintInput, options: PrintOptions): { pdf
   // ---------- 3. hoja de catering
   if (options.cateringSheet) drawCateringSheet(pdf, ctx, scenario, guests, first)
 
-  // ---------- 4. sin asignar
+  // ---------- 4. regalos
+  if (options.giftSheet && guests.some((g) => g.gift && g.status !== 'rechazado')) drawGiftSheet(pdf, ctx, scenario, guests, first)
+
+  // ---------- 5. sin asignar
   if (options.unassignedList) drawUnassigned(pdf, ctx, scenario, guests, first)
 
   // ---------- pies de página
@@ -693,7 +945,11 @@ export function buildSeatingPdf(input: PrintInput, options: PrintOptions): { pdf
     pdf.setFontSize(7)
     pdf.setTextColor(SOFT)
     pdf.text(`Página ${i} de ${total}`, w - MARGIN, h - MARGIN + 1, { align: 'right' })
-    pdf.text(pdfText(`Impreso el ${new Date().toLocaleDateString('es-ES')} · escenario «${scenario.name}»`).replace(/[«»]/g, '"'), MARGIN, h - MARGIN + 1)
+    if (options.footer) {
+      pdf.setFont('helvetica', 'bold')
+      pdf.setTextColor(INK)
+      pdf.text(pdfText(options.footer), MARGIN, h - MARGIN + 1)
+    }
   }
   report.pages = total
   return { pdf, report }
@@ -747,13 +1003,17 @@ function drawCateringSheet(pdf: jsPDF, ctx: PageCtx, scenario: Scenario, guests:
     const list = relevant.filter((g) => (tid ? g.tableId === tid : !g.tableId || !tableOrder.has(g.tableId)))
     if (!list.length) return null
     const counts = new Map<string, number>()
+    let babies = 0
     list.forEach((g) => {
-      const tags = dietaryAbbrs(g.dietary)
-      ;(tags.length ? tags : ['VER NOTA']).forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1))
+      if (isBaby(g.dietary)) babies++
+      const tags = dietaryTags(g.dietary).filter((t) => t.code !== 'bebe').map((t) => t.abbr)
+      if (!tags.length && !isBaby(g.dietary)) tags.push('VER NOTA')
+      tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1))
     })
     const severe = list.filter((g) => isSevere(g.dietary)).length
     const detail = [...counts.entries()].map(([k, v]) => `${v} ${k}`).join(', ')
-    return `${tid ? tableName.get(tid) : 'Sin mesa'}: ${list.length} (${detail})${severe ? ` · ${severe} ${SEVERE_MARK} alergia grave` : ''}`
+    const parts = [detail && `menús: ${detail}`, babies && `${babies} bebé(s) en trona, sin menú`, severe && `${severe} ${SEVERE_MARK} alergia grave`].filter(Boolean)
+    return `${tid ? tableName.get(tid) : 'Sin mesa'}: ${list.length} · ${parts.join(' · ')}`
   }).filter(Boolean) as string[]
   pdf.setFont('helvetica', 'normal')
   perTable.forEach((line) => {
@@ -801,14 +1061,17 @@ function drawCateringSheet(pdf: jsPDF, ctx: PageCtx, scenario: Scenario, guests:
   sorted.forEach((g, idx) => {
     const severe = isSevere(g.dietary)
     const sev = g.dietary.severity ? SEVERITIES.find((s) => s.code === g.dietary.severity)!.label : '—'
-    const tags = dietaryAbbrs(g.dietary)
-    const labels = [...ALLERGENS.filter((a) => g.dietary.allergens.includes(a.code)).map((a) => a.label), ...DIETS.filter((d) => g.dietary.diets.includes(d.code)).map((d) => d.label)]
+    const tagDefs = dietaryTags(g.dietary)
+    const tags = tagDefs.map((t) => t.abbr)
+    const labels = tagDefs.map((t) => t.label)
+    const baby = isBaby(g.dietary)
     const cells = [
       g.tableId && tableName.get(g.tableId) ? tableName.get(g.tableId)! : 'Sin mesa',
       g.seatIndex !== null && g.tableId ? String(g.seatIndex + 1) : '—',
       g.fullName,
-      labels.length ? `${tags.join('·')}\n${labels.join(', ')}` : '—',
-      severe ? `${SEVERE_MARK} ${sev}` : sev,
+      // primera línea vacía: ahí se dibujan las miniaturas de color
+      labels.length ? `\n${tags.join('·')}\n${labels.join(', ')}` : '—',
+      baby && !g.dietary.severity ? 'Trona' : severe ? `${SEVERE_MARK} ${sev}` : sev,
       g.dietary.notes || ''
     ]
     pdf.setFontSize(FS)
@@ -843,8 +1106,10 @@ function drawCateringSheet(pdf: jsPDF, ctx: PageCtx, scenario: Scenario, guests:
     let x = frame.x0
     wrapped.forEach((lines, i) => {
       pdf.setFont('helvetica', i === 2 || (i === 4 && severe) || (i === 3 && severe) ? 'bold' : 'normal')
-      pdf.setTextColor(INK)
+      if (i === 2 && g.isCouple) pdf.setTextColor(...COUPLE_RGB)
+      else pdf.setTextColor(INK)
       pdf.text(lines, x + 1.5, y + 1.2 + LH * 0.8)
+      if (i === 3) tagDefs.forEach((t, k) => drawIcon(pdf, t.code, t.color, x + 1.5 + k * (LH + 0.6), y + 1.2, LH))
       x += cols[i].width
     })
     pdf.setDrawColor(215)
@@ -860,6 +1125,110 @@ function drawCateringSheet(pdf: jsPDF, ctx: PageCtx, scenario: Scenario, guests:
     pdf.setTextColor(SOFT)
     pdf.text(pdfText(`${SEVERE_MARK} = alergia grave: evitar también trazas y contaminación cruzada. Asiento numerado como en el plano.`), frame.x0, y + 3)
   }
+}
+
+// ---------------------------------------------------------------- regalos
+
+/** Hoja para la wedding planner: dónde va cada regalo o detalle, por mesa y asiento. */
+function drawGiftSheet(pdf: jsPDF, ctx: PageCtx, scenario: Scenario, guests: Guest[], first: { value: boolean }) {
+  newPage(pdf, first, 'portrait')
+  drawHeader(ctx, 'Regalos en la mesa')
+  const frame = contentFrame(pdf)
+  let y = frame.y0
+  const tableOrder = new Map(scenario.tables.map((t, i) => [t.id, i]))
+  const tableName = new Map(scenario.tables.map((t) => [t.id, t.name]))
+  const list = guests
+    .filter((g) => g.gift && g.status !== 'rechazado')
+    .sort((a, b) => {
+      const ta = a.tableId && tableOrder.has(a.tableId) ? tableOrder.get(a.tableId)! : 9999
+      const tb = b.tableId && tableOrder.has(b.tableId) ? tableOrder.get(b.tableId)! : 9999
+      return ta !== tb ? ta - tb : (a.seatIndex ?? 999) - (b.seatIndex ?? 999)
+    })
+
+  pdf.setTextColor(INK)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(10)
+  drawIcon(pdf, 'gift', GIFT_COLOR, frame.x0, y + 0.6, 4.4)
+  pdf.text(`${list.length} regalo(s) o detalle(s) que dejar en la mesa`, frame.x0 + 6, y + 4)
+  y += 8
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8.5)
+  const perTable = [...scenario.tables.map((t) => t.id), null]
+    .map((tid) => {
+      const n = list.filter((g) => (tid ? g.tableId === tid : !g.tableId || !tableOrder.has(g.tableId))).length
+      return n ? `${tid ? tableName.get(tid) : 'Sin mesa'}: ${n}` : null
+    })
+    .filter(Boolean)
+    .join('   ·   ')
+  pdf.text(pdfText(perTable), frame.x0, y + 3)
+  y += 7
+
+  const cols: Col[] = [
+    { title: 'Mesa', width: 24 },
+    { title: 'Asiento', width: 16 },
+    { title: 'Invitado', width: 60 },
+    { title: 'Regalo', width: frame.x1 - frame.x0 - 100 }
+  ]
+  const FS = 9
+  const LH = lineHeight(FS)
+  const drawHead = () => {
+    pdf.setFillColor(60, 60, 60)
+    pdf.rect(frame.x0, y, frame.x1 - frame.x0, 6.5, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(8.5)
+    pdf.setTextColor(255, 255, 255)
+    let x = frame.x0
+    cols.forEach((c) => {
+      pdf.text(c.title, x + 1.5, y + 4.4)
+      x += c.width
+    })
+    y += 6.5
+  }
+  drawHead()
+  let prevTable: string | null | undefined
+  list.forEach((g, idx) => {
+    const cells = [
+      g.tableId && tableName.get(g.tableId) ? tableName.get(g.tableId)! : 'Sin mesa',
+      g.seatIndex !== null && g.tableId ? String(g.seatIndex + 1) : '—',
+      g.fullName,
+      g.gift!.description || '(sin especificar)'
+    ]
+    pdf.setFontSize(FS)
+    const wrapped = cells.map((c, i) => {
+      pdf.setFont('helvetica', i === 2 ? 'bold' : 'normal')
+      return pdf.splitTextToSize(pdfText(c), cols[i].width - 3) as string[]
+    })
+    const rowH = Math.max(...wrapped.map((w) => w.length)) * LH + 3
+    if (y + rowH > frame.y1) {
+      pdf.addPage('a4', 'portrait')
+      drawHeader(ctx, 'Regalos en la mesa (continuación)')
+      y = frame.y0
+      drawHead()
+    }
+    const tableKey = g.tableId ?? null
+    if (prevTable !== undefined && tableKey !== prevTable) {
+      pdf.setDrawColor(60)
+      pdf.setLineWidth(0.5)
+      pdf.line(frame.x0, y, frame.x1, y)
+    }
+    prevTable = tableKey
+    if (idx % 2 === 1) {
+      pdf.setFillColor(245, 243, 238)
+      pdf.rect(frame.x0, y, frame.x1 - frame.x0, rowH, 'F')
+    }
+    let x = frame.x0
+    wrapped.forEach((lines, i) => {
+      pdf.setFont('helvetica', i === 2 ? 'bold' : 'normal')
+      if (i === 2 && g.isCouple) pdf.setTextColor(...COUPLE_RGB)
+      else pdf.setTextColor(INK)
+      pdf.text(lines, x + 1.5, y + 1.5 + LH * 0.8)
+      x += cols[i].width
+    })
+    pdf.setDrawColor(215)
+    pdf.setLineWidth(0.2)
+    pdf.line(frame.x0, y + rowH, frame.x1, y + rowH)
+    y += rowH
+  })
 }
 
 // ---------------------------------------------------------------- sin asignar

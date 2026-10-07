@@ -600,3 +600,33 @@
 .dropdown-menu .scenario-create .btn-primary:hover { background: var(--color-olive-dark); }
 .dropdown-menu .scenario-create .btn-primary:disabled { opacity: 0.5; }
 .dietary-chip.is-on:hover { background: var(--color-terracotta-dark); color: #fff; }
+
+/* --- v3: datos de la boda, colores por categoría, regalos y trona --- */
+.app-header-couple {
+  background: none; border: none; padding: 0; cursor: pointer; color: var(--color-ink-faint);
+  text-align: left; font: inherit;
+}
+.app-header-couple:hover { color: var(--color-olive-dark); text-decoration: underline; }
+.dietary-chip.is-on, .dietary-chip.is-on:hover {
+  background: color-mix(in srgb, var(--chip-color, var(--color-terracotta)) 30%, white);
+  border-color: var(--chip-color, var(--color-terracotta-dark));
+  color: var(--color-ink); font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--chip-color, var(--color-terracotta-dark));
+}
+.dietary-badge { gap: 4px; background: var(--color-canvas-alt); color: var(--color-ink); }
+.dietary-badge.is-severe { background: var(--color-error-bg); color: var(--color-error); }
+.dietary-badge-tag {
+  display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--chip-color) 30%, white); border: 1px solid var(--chip-color);
+}
+.gift-badge { font-size: 12px; }
+.gift-editor { display: flex; flex-direction: column; gap: 6px; }
+.seat-highchair { stroke-dasharray: none; }
+.seat-gift-marker { font-size: 0.13px; pointer-events: none; }
+.gift-editor .checkbox-row {
+  text-transform: none; letter-spacing: normal; font-weight: 500; font-size: 13.5px; color: var(--color-ink);
+}
+.sidebar .segmented button { padding-left: 4px; padding-right: 4px; font-size: 12px; white-space: nowrap; }
+.guest-card-main { min-width: 0; flex: 1; }
+.guest-card-meta { flex-wrap: wrap; row-gap: 3px; }
+.guest-card-side { flex-shrink: 0; align-self: flex-start; }

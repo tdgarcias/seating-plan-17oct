@@ -1,4 +1,4 @@
-import type { Guest, Project, RoomSettings, Scenario, SeatAssignment } from '@/types'
+import type { Guest, Project, ProjectSettings, RoomSettings, Scenario, SeatAssignment } from '@/types'
 import { normalizeDietary } from '@/utils/dietary'
 import { computeSeatPositions } from '@/utils/geometry'
 
@@ -24,6 +24,13 @@ export const DEFAULT_ROOM: RoomSettings = {
   showGuestCount: true,
   showFullSeatNames: false,
   gridStepMeters: 0.5
+}
+
+/** Datos de la boda por defecto (también se aplican a proyectos antiguos sin rellenar). */
+export const DEFAULT_SETTINGS: ProjectSettings = {
+  coupleNames: 'Cati & Tomeu',
+  weddingDate: '2026-10-17',
+  venue: 'Els Calderers'
 }
 
 export function deepClone<T>(value: T): T {
@@ -136,6 +143,7 @@ export function migrateProject(raw: Project): MigrationResult {
     isCouple: g.isCouple ?? false,
     notes: g.notes ?? '',
     dietary: normalizeDietary(g.dietary),
+    gift: g.gift && typeof g.gift === 'object' ? { description: String((g.gift as { description?: unknown }).description ?? '') } : null,
     tableId: g.tableId ?? null,
     seatIndex: g.seatIndex ?? null
   }))
@@ -161,6 +169,14 @@ export function migrateProject(raw: Project): MigrationResult {
   const project: Project = {
     ...input,
     schemaVersion: CURRENT_SCHEMA_VERSION,
+    settings: {
+      coupleNames:
+        !input.settings?.coupleNames || input.settings.coupleNames === 'Nuestra boda'
+          ? DEFAULT_SETTINGS.coupleNames
+          : input.settings.coupleNames,
+      weddingDate: input.settings?.weddingDate || DEFAULT_SETTINGS.weddingDate,
+      venue: input.settings?.venue ?? DEFAULT_SETTINGS.venue
+    },
     incompatibilities: input.incompatibilities ?? [],
     groups: input.groups ?? [],
     scenarios,

@@ -6,6 +6,7 @@ import { downloadProjectFile, readProjectFile } from '@/services/storageService'
 import { exportGuestsCsv, exportScenarioJson, printSeatingPlan } from '@/services/exportService'
 import ExportModal from '@/components/export/ExportModal'
 import PrintA4Modal from '@/components/export/PrintA4Modal'
+import WeddingSettingsModal from '@/components/settings/WeddingSettingsModal'
 
 const TABS: { id: ViewMode; label: string }[] = [
   { id: 'mapa', label: 'Mapa' },
@@ -28,6 +29,7 @@ export default function Header() {
   const [exportOpen, setExportOpen] = useState(false)
   const [imageExportOpen, setImageExportOpen] = useState(false)
   const [printA4Open, setPrintA4Open] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -47,7 +49,9 @@ export default function Header() {
         <span className="app-header-mark" aria-hidden>⚘</span>
         <div className="app-header-title">
           <h1>Seating Plan</h1>
-          <span className="text-muted text-sm">{project.settings.coupleNames}</span>
+          <button className="app-header-couple text-sm" title="Editar nombres, lugar y fecha" onClick={() => setSettingsOpen(true)}>
+            {project.settings.coupleNames} <span aria-hidden>✎</span>
+          </button>
         </div>
       </div>
 
@@ -119,6 +123,7 @@ export default function Header() {
 
       {imageExportOpen && <ExportModal onClose={() => setImageExportOpen(false)} />}
       {printA4Open && <PrintA4Modal onClose={() => setPrintA4Open(false)} />}
+      {settingsOpen && <WeddingSettingsModal onClose={() => setSettingsOpen(false)} />}
     </header>
   )
 }

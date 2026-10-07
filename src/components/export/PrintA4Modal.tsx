@@ -3,10 +3,17 @@ import Modal from '@/components/common/Modal'
 import { useProjectStore } from '@/store/useProjectStore'
 import { guestsForScenario } from '@/store/scenarioAssignments'
 import { hasDietary } from '@/utils/dietary'
+import { getEmojiIcons } from '@/utils/emojiIcons'
 import type { PrintOptions, PrintReport } from '@/services/printA4Service'
 
 interface PrintA4ModalProps {
   onClose: () => void
+}
+
+/** 2026-10-17 → 17/10/2026 */
+function formatShortDate(value: string): string {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : value
 }
 
 function formatWeddingDate(value: string): string {
@@ -20,13 +27,14 @@ export default function PrintA4Modal({ onClose }: PrintA4ModalProps) {
   const project = useProjectStore((s) => s.project)
   const pushToast = useProjectStore((s) => s.pushToast)
   const [scenarioId, setScenarioId] = useState(project.activeScenarioId)
-  const [opts, setOpts] = useState<Omit<PrintOptions, 'title' | 'subtitle'>>({
+  const [opts, setOpts] = useState<Omit<PrintOptions, 'title' | 'subtitle' | 'footer'>>({
     orientation: 'auto',
     showDietary: true,
     includeLegend: true,
     seatNumbers: true,
     tableDetail: 'auto',
     cateringSheet: true,
+    giftSheet: true,
     unassignedList: false
   })
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -38,6 +46,7 @@ export default function PrintA4Modal({ onClose }: PrintA4ModalProps) {
   const scenario = project.scenarios.find((s) => s.id === scenarioId) ?? project.scenarios[0]
   const guests = useMemo(() => guestsForScenario(project, scenario.id), [project, scenario.id])
   const dietaryCount = guests.filter((g) => g.status !== 'rechazado' && hasDietary(g.dietary)).length
+  const giftCount = guests.filter((g) => g.status !== 'rechazado' && g.gift).length
   const filenameBase = `${project.settings.coupleNames || 'seating'}-${scenario.name}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')
 
   useEffect(() => {
@@ -51,9 +60,10 @@ export default function PrintA4Modal({ onClose }: PrintA4ModalProps) {
           `${guests.filter((g) => g.tableId).length} invitados sentados`,
           `${scenario.tables.length} mesas`
         ].filter(Boolean).join(' · ')
+        const footer = [project.settings.venue, formatShortDate(project.settings.weddingDate)].filter(Boolean).join(' · ')
         const { pdf, report } = buildSeatingPdf(
-          { scenario, guests },
-          { ...opts, title: project.settings.coupleNames || 'Seating plan', subtitle }
+          { scenario, guests, icons: getEmojiIcons() },
+          { ...opts, title: project.settings.coupleNames || 'Seating plan', subtitle, footer }
         )
         if (cancelled) return
         const blob = pdf.output('blob')
@@ -74,7 +84,7 @@ export default function PrintA4Modal({ onClose }: PrintA4ModalProps) {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [opts, scenario, guests, project.settings.coupleNames, project.settings.weddingDate])
+  }, [opts, scenario, guests, project.settings.coupleNames, project.settings.weddingDate, project.settings.venue])
 
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
 
@@ -101,7 +111,7 @@ export default function PrintA4Modal({ onClose }: PrintA4ModalProps) {
     <Modal onClose={onClose} width={1100}>
       <h2>Imprimir A4 · wedding planner y catering</h2>
       <p className="text-soft text-sm" style={{ marginTop: 4 }}>
-        PDF vectorial en A4 con el nombre completo de cada invitado. Las alergias se marcan con texto y "(!)", así que se leen igual en blanco y negro.
+        PDF vectorial en A4 con el nombre completo de cada invitado. Cada alergia o dieta tiene su color e icono; la abreviatura y el "(!)" mantienen la información aunque se imprima en blanco y negro.
       </p>
 
       <div className="print-modal-grid">
@@ -142,6 +152,10 @@ export default function PrintA4Modal({ onClose }: PrintA4ModalProps) {
             <label className="checkbox-row">
               <input type="checkbox" checked={opts.cateringSheet} onChange={(e) => set('cateringSheet', e.target.checked)} />
               Hoja de catering (tabla por mesa para camareros)
+            </label>
+            <label className="checkbox-row">
+              <input type="checkbox" checked={opts.giftSheet} onChange={(e) => set('giftSheet', e.target.checked)} />
+              <span>Hoja de regalos en la mesa <span className="text-muted">({giftCount})</span></span>
             </label>
             <label className="checkbox-row">
               <input type="checkbox" checked={opts.unassignedList} onChange={(e) => set('unassignedList', e.target.checked)} />
