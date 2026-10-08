@@ -5,6 +5,7 @@ import type {
   AIAnalysisResult,
   Guest,
   GuestGroup,
+  GuestLanguage,
   Incompatibility,
   Project,
   RoomFeature,
@@ -32,6 +33,7 @@ import {
 } from './scenarioAssignments'
 import { runSeatingAnalysis, AIAnalysisError } from '@/services/aiAnalysisService'
 import { defaultSeatsPerSide, computeAbsoluteSeatPositions, snap, clamp } from '@/utils/geometry'
+import { normalizeSections, nextSectionLabels, sectionRanges } from '@/utils/sections'
 import { HistoryStack, type HistorySnapshot } from './history'
 
 const TABLE_PALETTE = [
@@ -135,6 +137,10 @@ interface ProjectStore {
   assignGuestsToTable: (guestIds: string[], tableId: string) => void
   unassignGuest: (guestId: string) => void
   updateGuest: (id: string, partial: Partial<Guest>) => void
+  /** Fija el idioma (CAT/ESP) de varios invitados a la vez. */
+  setGuestsLanguage: (ids: string[], language: GuestLanguage | null) => void
+  /** Renumera 1…N todas las submesas del escenario (mesas en orden, de izquierda a derecha). */
+  renumberSections: () => void
   autoDistribute: (mode: 'random' | 'byGroup' | 'balanced', tableIds?: string[]) => void
 
   // incompatibilidades
@@ -394,6 +400,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         if (partial.capacity !== undefined && table.type === 'rect' && !partial.seatsPerSide) {
           table.seatsPerSide = defaultSeatsPerSide(partial.capacity)
         }
+        // las submesas siempre deben cubrir exactamente las columnas de asientos
+        const sections = normalizeSections(table)
+        table.sections = sections.length ? sections : undefined
         scenario.updatedAt = Date.now()
         // liberar invitados en asientos que ya no existen
         const validSeats = new Set(computeAbsoluteSeatPositions(table, []).map((s) => s.index))
@@ -431,6 +440,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
           name: `${original.name} (copia)`,
           x: clamp(original.x + 1, 0, Math.max(scenario.room.widthMeters, 0)),
           y: clamp(original.y + 1, 0, Math.max(scenario.room.heightMeters, 0))
+        }
+        if (copy.sections?.length) {
+          // la copia lleva números de submesa nuevos para no repetir los del original
+          const labels = nextSectionLabels(scenario, copy.sections.length)
+          copy.sections = copy.sections.map((sec, i) => ({ ...sec, id: createId('section'), label: labels[i] }))
         }
         scenario.tables.push(copy)
       })
@@ -552,6 +566,34 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       withHistory((draft) => {
         const guest = draft.guests.find((g) => g.id === id)
         if (guest) Object.assign(guest, partial)
+      })
+    },
+
+    setGuestsLanguage: (ids, language) => {
+      const set = new Set(ids)
+      withHistory((draft) => {
+        draft.guests.forEach((g) => {
+          if (set.has(g.id)) g.language = language
+        })
+      })
+    },
+
+    renumberSections: () => {
+      withHistory((draft) => {
+        const scenario = activeScenario(draft)
+        let n = 1
+        scenario.tables.forEach((t) => {
+          // de izquierda a derecha tal como se ve la mesa (si está girada 180°, se invierte)
+          const ranges = sectionRanges(t)
+          if (!ranges.length) return
+          const flipped = ((t.rotation % 360) + 360) % 360 > 90 && ((t.rotation % 360) + 360) % 360 <= 270
+          const ordered = flipped ? [...ranges].reverse() : ranges
+          ordered.forEach((r) => {
+            const sec = t.sections!.find((s) => s.id === r.section.id)
+            if (sec) sec.label = String(n++)
+          })
+        })
+        scenario.updatedAt = Date.now()
       })
     },
 

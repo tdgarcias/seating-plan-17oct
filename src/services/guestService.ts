@@ -1,6 +1,7 @@
 import type { ConfirmationStatus, Guest, GuestColumnMapping } from '@/types'
 import { createId } from '@/utils/id'
 import { emptyDietary, hasManualDietary, parseDietaryText } from '@/utils/dietary'
+import { parseLanguage } from '@/utils/language'
 
 /**
  * guestService
@@ -98,7 +99,8 @@ const SYNONYMS: Record<keyof GuestColumnMapping, string[]> = {
   notes: ['notas', 'notes', 'observaciones'],
   dietary: ['restricciones alimentarias', 'alergias', 'dieta', 'dietary', 'alimentacion'],
   table: ['mesa', 'table'],
-  role: ['rol', 'role', 'relacion', 'tipo de invitado', 'relationship']
+  role: ['rol', 'role', 'relacion', 'tipo de invitado', 'relationship'],
+  language: ['idioma', 'llengua', 'language', 'lengua']
 }
 
 /** Palabras clave (en Notas o en la columna Rol) que marcan a un invitado como uno de los novios. */
@@ -154,13 +156,14 @@ export function normalizeGuests(rows: string[][], mapping?: GuestColumnMapping):
   const iNotes = colIndex(finalMapping.notes)
   const iDietary = colIndex(finalMapping.dietary)
   const iRole = colIndex(finalMapping.role)
+  const iLanguage = colIndex(finalMapping.language)
 
   return dataRows.map((row, rowIdx) => {
     const first = iFirst !== -1 ? row[iFirst]?.trim() ?? '' : ''
     const last = iLast !== -1 ? row[iLast]?.trim() ?? '' : ''
     let full = iFull !== -1 ? row[iFull]?.trim() ?? '' : ''
     if (!full) full = [first, last].filter(Boolean).join(' ')
-    const idxCols = { iGroup, iCompanions, iStatus, iNotes, iDietary, iRole }
+    const idxCols = { iGroup, iCompanions, iStatus, iNotes, iDietary, iRole, iLanguage }
     if (!first && !last && full) {
       const parts = full.split(' ')
       return buildGuest(parts[0] ?? full, parts.slice(1).join(' '), full, row, idxCols, headerRow, rowIdx)
@@ -174,7 +177,7 @@ function buildGuest(
   last: string,
   full: string,
   row: string[],
-  idx: { iGroup: number; iCompanions: number; iStatus: number; iNotes: number; iDietary: number; iRole: number },
+  idx: { iGroup: number; iCompanions: number; iStatus: number; iNotes: number; iDietary: number; iRole: number; iLanguage: number },
   headerRow: string[],
   rowIdx: number
 ): Guest {
@@ -196,6 +199,7 @@ function buildGuest(
     role,
     isCouple: detectIsCouple(notes, role),
     gift: null,
+    language: idx.iLanguage !== -1 ? parseLanguage(row[idx.iLanguage]) : null,
     sourceRow: rowIdx + 2, // +2: fila 1 = cabecera, base 1 = igual que en la hoja
     tableId: null,
     seatIndex: null
@@ -291,8 +295,9 @@ export function mergePreservingAssignments(
       dietary = g.dietary
     }
 
-    // el regalo solo se gestiona en la app: se conserva siempre
-    return { ...g, id: prev.id, tableId: prev.tableId, seatIndex: prev.seatIndex, role, isCouple, dietary, gift: prev.gift ?? null }
+    // el regalo y el idioma se gestionan en la app: se conservan; la hoja solo rellena el idioma si aquí no hay
+    const language = prev.language ?? g.language ?? null
+    return { ...g, id: prev.id, tableId: prev.tableId, seatIndex: prev.seatIndex, role, isCouple, dietary, gift: prev.gift ?? null, language }
   })
   return { guests, dietaryConflicts }
 }

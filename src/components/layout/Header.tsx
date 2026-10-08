@@ -6,6 +6,7 @@ import { downloadProjectFile, readProjectFile } from '@/services/storageService'
 import { exportGuestsCsv, exportScenarioJson, printSeatingPlan } from '@/services/exportService'
 import ExportModal from '@/components/export/ExportModal'
 import PrintA4Modal from '@/components/export/PrintA4Modal'
+import LanguageExportModal from '@/components/export/LanguageExportModal'
 import WeddingSettingsModal from '@/components/settings/WeddingSettingsModal'
 
 const TABS: { id: ViewMode; label: string }[] = [
@@ -29,6 +30,7 @@ export default function Header() {
   const [exportOpen, setExportOpen] = useState(false)
   const [imageExportOpen, setImageExportOpen] = useState(false)
   const [printA4Open, setPrintA4Open] = useState(false)
+  const [langExportOpen, setLangExportOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,6 +102,9 @@ export default function Header() {
               <button onClick={() => { exportGuestsCsv(project.guests, scenario.tables); setExportOpen(false) }}>
                 Invitados (CSV)
               </button>
+              <button onClick={() => { setLangExportOpen(true); setExportOpen(false) }}>
+                Idioma CAT/ESP → Google Sheet (columna H)…
+              </button>
               <button onClick={() => { exportScenarioJson(scenario, project.guests); setExportOpen(false) }}>
                 Escenario (JSON)
               </button>
@@ -123,6 +128,7 @@ export default function Header() {
 
       {imageExportOpen && <ExportModal onClose={() => setImageExportOpen(false)} />}
       {printA4Open && <PrintA4Modal onClose={() => setPrintA4Open(false)} />}
+      {langExportOpen && <LanguageExportModal onClose={() => setLangExportOpen(false)} />}
       {settingsOpen && <WeddingSettingsModal onClose={() => setSettingsOpen(false)} />}
     </header>
   )

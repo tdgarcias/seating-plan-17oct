@@ -1,5 +1,6 @@
 import type { Guest, Incompatibility, Scenario, ValidationIssue } from '@/types'
 import { tableOutOfBounds, tablesOverlap } from './geometry'
+import { duplicateSectionLabels, sectionDisplay, sectionForSeat } from './sections'
 
 export function computeValidationIssues(
   scenario: Scenario,
@@ -66,6 +67,26 @@ export function computeValidationIssues(
     }
   })
 
+  // submesas: números repetidos y sentados sin asiento concreto (sin asiento no hay nº de submesa)
+  duplicateSectionLabels(scenario).forEach((label) => {
+    issues.push({
+      id: `dup-section-${label}`,
+      severity: 'warning',
+      message: `El número de submesa "${label}" está repetido. Usa "Renumerar submesas" o cámbialo a mano.`
+    })
+  })
+  const noSeatInSections = guests.filter((g) => {
+    const t = tables.find((tb) => tb.id === g.tableId)
+    return t?.sections?.length && g.seatIndex === null
+  })
+  if (noSeatInSections.length) {
+    issues.push({
+      id: 'section-no-seat',
+      severity: 'warning',
+      message: `${noSeatInSections.length} invitado(s) están en una mesa con submesas pero sin asiento: no tienen nº de mesa (${noSeatInSections.slice(0, 3).map((g) => g.fullName).join(', ')}${noSeatInSections.length > 3 ? '…' : ''}).`
+    })
+  }
+
   const unassigned = guests.filter((g) => !g.tableId)
   if (unassigned.length > 0) {
     issues.push({
@@ -82,6 +103,17 @@ export function computeValidationIssues(
     const b = guestById.get(inc.guestBId)
     if (a && b && a.tableId && a.tableId === b.tableId) {
       const table = tables.find((t) => t.id === a.tableId)
+      const sa = sectionForSeat(table, a.seatIndex)
+      const sb = sectionForSeat(table, b.seatIndex)
+      if (sa && sb && sa.id !== sb.id) {
+        issues.push({
+          id: `incompat-${inc.id}`,
+          severity: 'warning',
+          tableId: a.tableId,
+          message: `${a.fullName} (${sectionDisplay(sa.label)}) y ${b.fullName} (${sectionDisplay(sb.label)}) están en submesas distintas de ${table?.name ?? ''}, pero se marcaron como incompatibles.`
+        })
+        return
+      }
       issues.push({
         id: `incompat-${inc.id}`,
         severity: 'error',

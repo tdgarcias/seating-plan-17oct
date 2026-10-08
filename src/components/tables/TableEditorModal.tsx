@@ -5,6 +5,9 @@ import NumberField from '@/components/common/NumberField'
 import { useProjectStore, useActiveScenario, nextPaletteColor } from '@/store/useProjectStore'
 import { computeSeatPositions, defaultSeatsPerSide } from '@/utils/geometry'
 import type { SeatsPerSide, TableType } from '@/types'
+import SectionEditor from './SectionEditor'
+import { seatSectionMap } from '@/utils/sections'
+import { languageAbbr } from '@/utils/language'
 
 const PALETTE = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => nextPaletteColor(i))
 
@@ -28,6 +31,7 @@ export default function TableEditorModal({ tableId, onClose }: TableEditorModalP
   if (!table) return null
 
   const seats = computeSeatPositions(table, guests)
+  const seatSections = seatSectionMap(table)
   const unassigned = guests.filter((g) => !g.tableId)
 
   const setType = (type: TableType) => {
@@ -134,6 +138,11 @@ export default function TableEditorModal({ tableId, onClose }: TableEditorModalP
                     })}
                   </div>
                 </div>
+
+                <div className="field">
+                  <label>Submesas</label>
+                  <SectionEditor table={table} />
+                </div>
               </>
             )}
 
@@ -188,10 +197,16 @@ export default function TableEditorModal({ tableId, onClose }: TableEditorModalP
                     if (guestId) assignGuestToSeat(guestId, table.id, seat.index)
                   }}
                 >
-                  <span className="text-sm text-muted">#{seat.index + 1}</span>
+                  <span className="text-sm text-muted">
+                    #{seat.index + 1}
+                    {seatSections.size > 0 && <span className="section-chip" title="Submesa">{seatSections.get(seat.index)?.section.label}</span>}
+                  </span>
                   {seat.guest ? (
                     <>
-                      <span className={`truncate ${seat.guest.isCouple ? 'is-couple-text' : ''}`}>{seat.guest.fullName}</span>
+                      <span className={`truncate ${seat.guest.isCouple ? 'is-couple-text' : ''}`}>
+                        {seat.guest.fullName}
+                        {seat.guest.language && <span className={`lang-chip is-${seat.guest.language}`}>{languageAbbr(seat.guest.language)}</span>}
+                      </span>
                       <button className="btn-icon btn-ghost btn-sm" onClick={() => unassignGuest(seat.guest!.id)}>✕</button>
                     </>
                   ) : (

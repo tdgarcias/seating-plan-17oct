@@ -4,6 +4,8 @@ import { useProjectStore, useActiveScenario } from '@/store/useProjectStore'
 import { SUGGESTED_ROLES, type ConfirmationStatus } from '@/types'
 import DietaryEditor from '@/components/dietary/DietaryEditor'
 import GiftEditor from './GiftEditor'
+import { LANGUAGES } from '@/utils/language'
+import { guestTableLabel } from '@/utils/sections'
 
 interface GuestDetailModalProps {
   guestId: string
@@ -38,6 +40,7 @@ export default function GuestDetailModal({ guestId, onClose }: GuestDetailModalP
       notes: draft.notes,
       dietary: draft.dietary,
       gift: draft.gift,
+      language: draft.language,
       companions: draft.companions,
       group: draft.group,
       status: draft.status,
@@ -51,7 +54,7 @@ export default function GuestDetailModal({ guestId, onClose }: GuestDetailModalP
     <Modal onClose={onClose} width={620}>
       <h2 className={guest.isCouple ? 'is-couple-text' : ''}>{guest.isCouple && '♥ '}{guest.fullName}</h2>
       <p className="text-soft text-sm" style={{ marginTop: 2 }}>
-        {table ? `${table.name} · asiento ${guest.seatIndex !== null ? guest.seatIndex + 1 : '—'}` : 'Sin mesa asignada'}
+        {table ? `${guestTableLabel(scenario, guest, true)} · asiento ${guest.seatIndex !== null ? guest.seatIndex + 1 : '—'}` : 'Sin mesa asignada'}
       </p>
 
       <div className="flex-col gap-3" style={{ marginTop: 16 }}>
@@ -103,6 +106,18 @@ export default function GuestDetailModal({ guestId, onClose }: GuestDetailModalP
         <div className="field">
           <label>Alergias, intolerancias y dietas</label>
           <DietaryEditor value={draft.dietary} onChange={(dietary) => setDraft({ ...draft, dietary })} />
+        </div>
+
+        <div className="field">
+          <label>Idioma del detalle</label>
+          <div className="segmented lang-toggle">
+            {LANGUAGES.map((l) => (
+              <button key={l.code} className={draft.language === l.code ? 'is-active' : ''} onClick={() => setDraft({ ...draft, language: l.code })}>
+                {l.abbr} · {l.label}
+              </button>
+            ))}
+            <button className={!draft.language ? 'is-active' : ''} onClick={() => setDraft({ ...draft, language: null })}>Sin definir</button>
+          </div>
         </div>
 
         <div className="field">

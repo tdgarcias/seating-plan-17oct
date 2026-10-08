@@ -2,6 +2,8 @@ import { useMemo, useRef } from 'react'
 import type { Guest, TableItem } from '@/types'
 import { computeSeatPositions } from '@/utils/geometry'
 import { dietaryColors, hasDietary, isBaby, isSevere, GIFT_ICON } from '@/utils/dietary'
+import { sectionRanges } from '@/utils/sections'
+import { languageAbbr } from '@/utils/language'
 
 interface TableShapeProps {
   table: TableItem
@@ -35,6 +37,8 @@ export default function TableShape({
   onSelect, onOpenEditor, onDropGuestOnTable, onDropGuestOnSeat
 }: TableShapeProps) {
   const seats = useMemo(() => computeSeatPositions(table, guests), [table, guests])
+  const sections = useMemo(() => sectionRanges(table), [table])
+  const bodyLen = table.length ?? 0.9
   const occupants = guests.filter((g) => g.tableId === table.id)
   const overCapacity = occupants.length > table.capacity
   const hoverTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
@@ -80,12 +84,42 @@ export default function TableShape({
         />
       )}
 
-      {showNames && (
+      {sections.length > 0 && (
+        <g className="table-sections">
+          {sections.map((r) => (
+            <g key={r.section.id}>
+              {r.index % 2 === 1 && (
+                <rect className="section-band" x={r.drawX0} y={-bodyLen / 2} width={r.drawX1 - r.drawX0} height={bodyLen} />
+              )}
+              {r.index > 0 && (
+                <line className="section-divider" x1={r.drawX0} x2={r.drawX0} y1={-bodyLen / 2 - 0.68} y2={bodyLen / 2 + 0.68} />
+              )}
+              <text
+                className="section-label" textAnchor="middle" dominantBaseline="central"
+                transform={`translate(${(r.drawX0 + r.drawX1) / 2} ${bodyLen * 0.22}) rotate(${-table.rotation})`}
+              >
+                {r.section.label}
+              </text>
+            </g>
+          ))}
+        </g>
+      )}
+
+      {sections.length > 0 && (showNames || showGuestCount) && (
+        // con submesas: nombre y ocupación en una sola línea, en la mitad superior
+        <text className="table-label" textAnchor="middle" transform={`translate(0 ${-bodyLen * 0.1}) rotate(${-table.rotation})`}>
+          {showNames ? table.name : ''}
+          {showGuestCount && (
+            <tspan className={`table-capacity ${overCapacity ? 'is-over' : ''}`}>{showNames ? ' · ' : ''}{occupants.length}/{table.capacity}</tspan>
+          )}
+        </text>
+      )}
+      {sections.length === 0 && showNames && (
         <text className="table-label" textAnchor="middle" dy="-0.02" transform={`rotate(${-table.rotation})`}>
           {table.name}
         </text>
       )}
-      {showGuestCount && (
+      {sections.length === 0 && showGuestCount && (
         <text
           className={`table-capacity ${overCapacity ? 'is-over' : ''}`}
           textAnchor="middle"
@@ -160,6 +194,11 @@ export default function TableShape({
                 })
               })()}
             </g>
+          )}
+          {seat.guest?.language && (
+            <text className="seat-lang-marker" x={0} y={0.29} textAnchor="middle" transform={`rotate(${-table.rotation} 0 0)`}>
+              {languageAbbr(seat.guest.language)}
+            </text>
           )}
           {seat.guest?.gift && (
             <text className="seat-gift-marker" x={-0.16} y={-0.12} textAnchor="middle" transform={`rotate(${-table.rotation} -0.16 -0.12)`}>

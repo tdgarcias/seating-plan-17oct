@@ -6,6 +6,9 @@
 export type ConfirmationStatus = 'confirmado' | 'pendiente' | 'rechazado'
 
 /** Roles habituales sugeridos; el campo es texto libre para admitir cualquier otro. */
+/** Idioma del detalle/tarjeta del invitado. null = sin definir. */
+export type GuestLanguage = 'ca' | 'es'
+
 export const SUGGESTED_ROLES = ['Familiar', 'Amigo/a', 'Compañero/a de trabajo', 'Pareja de invitado', 'Proveedor', 'Otro'] as const
 
 export interface Guest {
@@ -21,6 +24,8 @@ export interface Guest {
   dietary: DietaryInfo
   /** Regalo o detalle que tendrá en su sitio. null si no tiene. */
   gift: GiftInfo | null
+  /** Idioma del detalle (CAT/ESP). Se gestiona en la app; si la hoja trae una columna "Idioma" se usa solo cuando aquí no hay valor. */
+  language: GuestLanguage | null
   /** Rol del invitado respecto a los novios (familiar, amigo, compañero de trabajo...). Texto libre. */
   role: string
   /** True si este invitado ES uno de los novios (detectado en la hoja o marcado manualmente). */
@@ -105,6 +110,21 @@ export interface TableItem {
   /** Sólo para mesas rectangulares: distribución explícita de asientos por lado (opcional). */
   seatsPerSide?: SeatsPerSide
   locked?: boolean
+  /**
+   * Sólo mesas rectangulares: submesas (tramos a lo largo de la mesa, con los dos lados enfrentados).
+   * El orden es de izquierda a derecha en coordenadas locales. La suma de `span` = nº de columnas
+   * de asientos del lado largo. Vacío o ausente = la mesa no está dividida.
+   */
+  sections?: TableSection[]
+}
+
+/** Tramo de una mesa imperial que funciona como "mesa" a efectos del seating (nº de mesa en la tarjeta). */
+export interface TableSection {
+  id: string
+  /** Nº o nombre visible ("3", "Família Sorell"). Numeración global en toda la sala. */
+  label: string
+  /** Nº de columnas de asientos del tramo (asientos por lado). */
+  span: number
 }
 
 export type RoomFeatureType = 'dj' | 'banos' | 'puerta' | 'barra' | 'pista' | 'otro'
@@ -202,6 +222,7 @@ export interface GuestColumnMapping {
   dietary?: string
   table?: string
   role?: string
+  language?: string
 }
 
 export type GuestLoadStatus = 'idle' | 'loading' | 'success' | 'error'

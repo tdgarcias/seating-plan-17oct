@@ -1,5 +1,7 @@
 import type { Guest, Project, ProjectSettings, RoomSettings, Scenario, SeatAssignment } from '@/types'
 import { normalizeDietary } from '@/utils/dietary'
+import { normalizeLanguage } from '@/utils/language'
+import { normalizeSections } from '@/utils/sections'
 import { computeSeatPositions } from '@/utils/geometry'
 
 /**
@@ -144,6 +146,7 @@ export function migrateProject(raw: Project): MigrationResult {
     notes: g.notes ?? '',
     dietary: normalizeDietary(g.dietary),
     gift: g.gift && typeof g.gift === 'object' ? { description: String((g.gift as { description?: unknown }).description ?? '') } : null,
+    language: normalizeLanguage((g as { language?: unknown }).language),
     tableId: g.tableId ?? null,
     seatIndex: g.seatIndex ?? null
   }))
@@ -159,7 +162,10 @@ export function migrateProject(raw: Project): MigrationResult {
     }
     return {
       ...s,
-      tables: s.tables ?? [],
+      tables: (s.tables ?? []).map((t) => {
+        const sections = normalizeSections(t)
+        return sections.length ? { ...t, sections } : { ...t, sections: undefined }
+      }),
       roomFeatures: s.roomFeatures ?? [],
       room: { ...DEFAULT_ROOM, ...s.room },
       assignments

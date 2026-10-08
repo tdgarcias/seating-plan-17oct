@@ -1,6 +1,7 @@
 import type { Guest } from '@/types'
 import DietaryBadge from '@/components/dietary/DietaryBadge'
 import { GIFT_ICON } from '@/utils/dietary'
+import { languageAbbr } from '@/utils/language'
 
 interface GuestCardProps {
   guest: Guest
@@ -35,6 +36,7 @@ export default function GuestCard({ guest, selected, tableName, onToggleSelect, 
       <div className="guest-card-main">
         <p className={`guest-card-name ${guest.isCouple ? 'is-couple-text' : ''}`}>
           {guest.isCouple && '♥ '}{guest.fullName}
+          {guest.language && <span className={`lang-chip is-${guest.language}`} title="Idioma del detalle">{languageAbbr(guest.language)}</span>}
         </p>
         <div className="guest-card-meta">
           {guest.role && <span className="text-muted text-sm truncate">{guest.role}</span>}

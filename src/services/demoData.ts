@@ -54,6 +54,7 @@ export function generateDemoGuests(count = 50): Guest[] {
       role: pick(ROLES, i * 4 + 1),
       isCouple: false,
       gift: null,
+      language: null,
       tableId: null,
       seatIndex: null
     })

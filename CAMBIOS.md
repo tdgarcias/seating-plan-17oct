@@ -1,8 +1,94 @@
-# Cambios: escenarios independientes, alergias e impresión A4
+# Cambios: submesas, idioma CAT/ESP y exportación a Google Sheets
 
-> Este zip es **acumulativo**: incluye también los cambios de la entrega anterior. Puedes aplicarlo tanto sobre el repositorio original como sobre la versión ya actualizada.
+> Este zip es **acumulativo**: incluye también los cambios de las entregas anteriores. Puedes aplicarlo tanto sobre el repositorio original como sobre la versión ya actualizada.
 
-## Novedades de esta versión (v3)
+## Novedades de esta versión (v4)
+
+### Submesas (dividir una mesa imperial en varias "mesas")
+- En la ficha de una mesa rectangular (panel derecho o vista ampliada ⤢), sección **Submesas**:
+  - "✂ Dividir en N submesas" crea N tramos iguales a lo largo de la mesa.
+  - Cada tramo incluye los asientos de arriba y de abajo que quedan enfrentados (p. ej. asientos 1–6 y 33–38).
+  - Para cada tramo se puede editar el **nº o nombre** y los **asientos por lado**. El tramo vecino compensa la diferencia, así que el total siempre cuadra.
+  - Botones: **+ Tramo**, **⇹ Igualar**, **✕** (une el tramo con su vecino) y **Quitar submesas**.
+- **Numeración global**: las submesas nuevas continúan la numeración de la sala (mesa A → 1–5, mesa B → 6–10). "**1…N Renumerar sala**" vuelve a numerar todas de izquierda a derecha.
+- El nº de submesa **se deduce del asiento**: mover a alguien de silla cambia su submesa automáticamente. No hay que asignar nada a mano.
+- **En pantalla**:
+  - bandas alternas suaves, separadores discontinuos y nº difuminado;
+  - el nombre de la mesa y la ocupación pasan a una sola línea;
+  - la lista de invitados y la ficha muestran "Mesa 3" (y la mesa física entre paréntesis);
+  - en la vista ampliada cada asiento lleva su nº de submesa.
+- **Avisos**:
+  - números de submesa repetidos;
+  - invitados en una mesa con submesas pero sin asiento (no tienen nº de mesa).
+  - Si dos incompatibles comparten mesa imperial pero están en submesas distintas, el aviso baja de error a advertencia.
+- Si cambias los asientos por lado, las submesas se reajustan solas. Al duplicar una mesa, la copia recibe números nuevos.
+
+### Idioma del detalle (CAT / ESP)
+- **Ficha del invitado**: "Idioma del detalle" (CAT · Català / ESP · Español / Sin definir).
+- **En bloque desde la lista**:
+  - nuevo filtro de idioma y botón "Seleccionar N", que selecciona los invitados filtrados (por ejemplo, toda una familia);
+  - en la barra de selección, botones **CAT / ESP / —**.
+- **Contador** en la lista: "🗣 CAT x · ESP y · N sin idioma". Pulsar "sin idioma" filtra a quienes faltan.
+- Etiqueta CAT/ESP junto al nombre en la lista, en la vista ampliada de mesa y, muy pequeña, bajo cada asiento del plano.
+- **Sincronizar con Google Sheets no borra el idioma.** Si la hoja tiene una columna "Idioma", solo rellena a quien no tenga idioma en la app.
+
+### Impresión A4
+- **Submesas difuminadas** sobre las mesas: bandas grises muy claras, separadores discontinuos que cruzan la fila de asientos y el nº en gris claro.
+- Si una mesa no cabe en una página, se parte **por el límite entre submesas**. La cabecera indica, por ejemplo, "Mesa imperial A · Mesas 1-2 (asientos 1-14, 33-46)".
+- **CAT/ESP muy pequeño en gris** al final del nombre de cada invitado, en el plano y en las páginas por mesa. La leyenda añade "CAT / ESP = idioma del detalle".
+- **Hoja de catering**:
+  - la columna "Mesa" muestra la submesa ("Mesa 3");
+  - el resumen va por submesa;
+  - el orden es por submesa y asiento;
+  - CAT/ESP en pequeño junto al nombre.
+- La **hoja de regalos** pasa a llamarse "Regalos y detalles en la mesa":
+  - cuenta los detalles **por idioma y submesa** (CAT 8 · ESP 4…), contando a todos los sentados;
+  - la tabla de regalos incluye la columna Idioma.
+- Opciones nuevas en el diálogo: "Idioma del detalle (CAT/ESP)" y "Submesas difuminadas".
+
+### Exportar el idioma a la Google Sheet (columna H)
+- Se abre desde **Exportar → Idioma CAT/ESP → Google Sheet (columna H)…** o desde el enlace "→ Sheet (col. H)" de la lista.
+- La app **lee la hoja en ese momento** y empareja cada fila con su invitado por el nombre completo, igual que la sincronización.
+- Genera una columna con "Idioma" en la primera línea y un valor por fila, en el orden exacto de la hoja.
+- **📋 Copiar columna H**: en Google Sheets, haz clic en **H1** y pega.
+- Antes de copiar ves una vista previa (fila, nombre, valor) y los avisos: invitados sin idioma (celda vacía) y filas de la hoja que no están en la app.
+- **⬇ Descargar CSV** con fila, nombre e idioma, por si prefieres revisarlo aparte.
+- Si la hoja no se puede leer (sin conexión), se usa el orden de la última sincronización y se avisa.
+- Después de pegar, la columna "Idioma" se reconoce al sincronizar, así que los datos van y vuelven sin perderse.
+
+### Otros
+- El CSV de invitados añade las columnas **Idioma** y **Submesa**. El JSON del escenario incluye `submesa` e `idioma`.
+- Migración automática: en los proyectos guardados, los invitados quedan "sin idioma" y las mesas sin submesas. No se pierde nada.
+
+**Archivos nuevos en v4:**
+- `src/utils/sections.ts`
+- `src/utils/language.ts`
+- `src/components/tables/SectionEditor.tsx`
+- `src/components/export/LanguageExportModal.tsx`
+
+**Modificados en v4:**
+- `src/types/index.ts`
+- `src/store/useProjectStore.ts`
+- `src/store/scenarioAssignments.ts`
+- `src/services/guestService.ts`
+- `src/services/exportService.ts`
+- `src/services/printA4Service.ts`
+- `src/services/demoData.ts`
+- `src/utils/validation.ts`
+- `src/components/room/TableShape.tsx`
+- `src/components/tables/PropertiesPanel.tsx`
+- `src/components/tables/TableEditorModal.tsx`
+- `src/components/guests/GuestList.tsx`
+- `src/components/guests/GuestCard.tsx`
+- `src/components/guests/GuestDetailModal.tsx`
+- `src/components/layout/Header.tsx`
+- `src/components/export/PrintA4Modal.tsx`
+- `src/styles/layout.css`
+
+---
+
+## Versión anterior (v3)
+
 
 - **Datos de la boda:**
   - "Cati & Tomeu" sustituye a "Nuestra boda".

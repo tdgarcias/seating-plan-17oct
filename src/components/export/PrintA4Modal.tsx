@@ -35,7 +35,9 @@ export default function PrintA4Modal({ onClose }: PrintA4ModalProps) {
     tableDetail: 'auto',
     cateringSheet: true,
     giftSheet: true,
-    unassignedList: false
+    unassignedList: false,
+    showLanguage: true,
+    showSections: true
   })
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [report, setReport] = useState<PrintReport | null>(null)
@@ -47,6 +49,8 @@ export default function PrintA4Modal({ onClose }: PrintA4ModalProps) {
   const guests = useMemo(() => guestsForScenario(project, scenario.id), [project, scenario.id])
   const dietaryCount = guests.filter((g) => g.status !== 'rechazado' && hasDietary(g.dietary)).length
   const giftCount = guests.filter((g) => g.status !== 'rechazado' && g.gift).length
+  const langCount = guests.filter((g) => g.status !== 'rechazado' && g.language).length
+  const sectionCount = scenario.tables.reduce((n, t) => n + (t.sections?.length ?? 0), 0)
   const filenameBase = `${project.settings.coupleNames || 'seating'}-${scenario.name}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')
 
   useEffect(() => {
@@ -144,6 +148,14 @@ export default function PrintA4Modal({ onClose }: PrintA4ModalProps) {
             <label className={`checkbox-row ${!opts.showDietary ? 'is-disabled' : ''}`}>
               <input type="checkbox" disabled={!opts.showDietary} checked={opts.includeLegend} onChange={(e) => set('includeLegend', e.target.checked)} />
               Incluir leyenda de abreviaturas
+            </label>
+            <label className="checkbox-row">
+              <input type="checkbox" checked={opts.showLanguage} onChange={(e) => set('showLanguage', e.target.checked)} />
+              <span>Idioma del detalle (CAT/ESP) en pequeño junto al nombre <span className="text-muted">({langCount})</span></span>
+            </label>
+            <label className={`checkbox-row ${!sectionCount ? 'is-disabled' : ''}`}>
+              <input type="checkbox" disabled={!sectionCount} checked={opts.showSections} onChange={(e) => set('showSections', e.target.checked)} />
+              <span>Submesas difuminadas sobre las mesas <span className="text-muted">({sectionCount})</span></span>
             </label>
             <label className="checkbox-row">
               <input type="checkbox" checked={opts.seatNumbers} onChange={(e) => set('seatNumbers', e.target.checked)} />

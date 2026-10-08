@@ -1,7 +1,10 @@
 import { formatDietary, hasDietary, dietaryAbbrs } from '@/utils/dietary'
 import type { Guest, Scenario, TableItem } from '@/types'
+import { languageAbbr } from '@/utils/language'
+import { sectionDisplay, sectionForSeat } from '@/utils/sections'
+import { fetchGuestsFromUrl } from './guestService'
 
-function triggerDownload(blob: Blob, filename: string) {
+export function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -20,9 +23,10 @@ function csvEscape(value: string): string {
 /** Exporta el listado de invitados (con su mesa/asiento asignados) a CSV. */
 export function exportGuestsCsv(guests: Guest[], tables: TableItem[], filename = 'invitados.csv') {
   const tableName = new Map(tables.map((t) => [t.id, t.name]))
+  const tableById = new Map(tables.map((t) => [t.id, t]))
   const header = [
     'Nombre', 'Apellidos', 'Nombre completo', 'Grupo', 'Rol', 'Acompañantes',
-    'Estado', 'Notas', 'Restricciones alimentarias', 'Regalo en mesa', 'Mesa', 'Asiento'
+    'Estado', 'Notas', 'Restricciones alimentarias', 'Regalo en mesa', 'Idioma', 'Mesa', 'Submesa', 'Asiento'
   ]
   const rows = guests.map((g) => [
     g.firstName,
@@ -35,7 +39,12 @@ export function exportGuestsCsv(guests: Guest[], tables: TableItem[], filename =
     g.notes,
     formatDietary(g.dietary),
     g.gift ? g.gift.description || 'Sí' : '',
+    languageAbbr(g.language),
     g.tableId ? tableName.get(g.tableId) ?? '' : '',
+    (() => {
+      const sec = g.tableId ? sectionForSeat(tableById.get(g.tableId), g.seatIndex) : null
+      return sec ? sectionDisplay(sec.label) : ''
+    })(),
     g.seatIndex !== null ? String(g.seatIndex + 1) : ''
   ])
   const csv = [header, ...rows].map((r) => r.map((c) => csvEscape(String(c))).join(',')).join('\n')
@@ -53,6 +62,8 @@ export function exportScenarioJson(scenario: Scenario, guests: Guest[], filename
       ...t,
       invitados: assigned.filter((g) => g.tableId === t.id).map((g) => ({
         nombre: g.fullName,
+        ...(sectionForSeat(t, g.seatIndex) ? { submesa: sectionForSeat(t, g.seatIndex)!.label } : {}),
+        ...(g.language ? { idioma: languageAbbr(g.language) } : {}),
         rol: g.role,
         novios: g.isCouple,
         asiento: g.seatIndex !== null ? g.seatIndex + 1 : null,
@@ -176,4 +187,84 @@ export async function exportSvgToPdf(svgEl: SVGSVGElement, filename = 'seating-p
 /** Abre el diálogo de impresión del navegador; el CSS de impresión se encarga del layout. */
 export function printSeatingPlan() {
   window.print()
+}
+
+// ---------------------------------------------------------------- idioma → Google Sheet
+
+export interface LanguageColumnRow {
+  /** Fila de la hoja (1 = cabecera). */
+  row: number
+  name: string
+  value: string
+  status: 'ok' | 'sin-idioma' | 'no-encontrado'
+}
+
+export interface LanguageColumnResult {
+  header: string
+  rows: LanguageColumnRow[]
+  /** Texto listo para pegar a partir de la celda H1 (una línea por fila de la hoja). */
+  text: string
+  /** True si se ha leído la hoja en este momento; false si se ha usado el orden guardado en la última sincronización. */
+  live: boolean
+  /** Invitados de la app que no están en la hoja (añadidos a mano o renombrados). */
+  notInSheet: string[]
+}
+
+function nameKey(name: string): string {
+  return name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Prepara la columna de idioma (CAT/ESP) alineada fila a fila con la Google Sheet.
+ * Lee la hoja en este momento para respetar su orden actual y empareja cada fila con
+ * el invitado de la app por nombre completo (igual que la sincronización).
+ * Si no se puede leer la hoja, usa la fila guardada en la última sincronización.
+ */
+export async function buildLanguageColumn(sheetUrl: string, guests: Guest[], header = 'Idioma'): Promise<LanguageColumnResult> {
+  let sheetRows: { row: number; name: string }[]
+  let live = true
+  try {
+    const { guests: fromSheet } = await fetchGuestsFromUrl(sheetUrl)
+    sheetRows = fromSheet.map((g) => ({ row: g.sourceRow ?? 0, name: g.fullName })).filter((r) => r.row > 1)
+  } catch {
+    live = false
+    sheetRows = guests.filter((g) => g.sourceRow).map((g) => ({ row: g.sourceRow!, name: g.fullName }))
+  }
+
+  const byName = new Map<string, Guest[]>()
+  guests.forEach((g) => {
+    const k = nameKey(g.fullName)
+    byName.set(k, [...(byName.get(k) ?? []), g])
+  })
+  const used = new Set<string>()
+  const rows: LanguageColumnRow[] = sheetRows
+    .sort((a, b) => a.row - b.row)
+    .map((r) => {
+      const candidates = (byName.get(nameKey(r.name)) ?? []).filter((g) => !used.has(g.id))
+      const g = candidates[0]
+      if (!g) return { row: r.row, name: r.name, value: '', status: 'no-encontrado' as const }
+      used.add(g.id)
+      const value = languageAbbr(g.language)
+      return { row: r.row, name: r.name, value, status: value ? ('ok' as const) : ('sin-idioma' as const) }
+    })
+
+  const maxRow = rows.reduce((m, r) => Math.max(m, r.row), 1)
+  const byRow = new Map(rows.map((r) => [r.row, r.value]))
+  const lines = [header]
+  for (let row = 2; row <= maxRow; row++) lines.push(byRow.get(row) ?? '')
+
+  return {
+    header,
+    rows,
+    text: lines.join('\n'),
+    live,
+    notInSheet: guests.filter((g) => !used.has(g.id)).map((g) => g.fullName)
+  }
+}
+
+/** CSV de control con fila, nombre e idioma (para importarlo o revisarlo). */
+export function exportLanguageCsv(result: LanguageColumnResult, filename = 'idiomas-columna-H.csv') {
+  const lines = [['Fila', 'Nombre', result.header], ...result.rows.map((r) => [String(r.row), r.name, r.value])]
+  const csv = lines.map((l) => l.map((c) => csvEscape(c)).join(',')).join('\n')
+  triggerDownload(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }), filename)
 }

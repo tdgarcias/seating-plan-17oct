@@ -6,6 +6,9 @@ import ConfirmDialog from '@/components/common/ConfirmDialog'
 import Modal from '@/components/common/Modal'
 import DietarySummaryModal from '@/components/dietary/DietarySummaryModal'
 import { hasDietary } from '@/utils/dietary'
+import { LANGUAGES } from '@/utils/language'
+import { guestTableLabel } from '@/utils/sections'
+import LanguageExportModal from '@/components/export/LanguageExportModal'
 
 type Filter = 'todos' | 'sin-asignar' | 'asignados' | 'restricciones' | 'regalos'
 
@@ -21,11 +24,14 @@ export default function GuestList() {
   const setSelectedGuestIds = useProjectStore((s) => s.setSelectedGuestIds)
   const assignGuestsToTable = useProjectStore((s) => s.assignGuestsToTable)
   const autoDistribute = useProjectStore((s) => s.autoDistribute)
+  const setGuestsLanguage = useProjectStore((s) => s.setGuestsLanguage)
 
   const [search, setSearch] = useState('')
   const [groupFilter, setGroupFilter] = useState('todos')
   const [statusFilter, setStatusFilter] = useState<'todos' | Guest_Status>('todos')
   const [filter, setFilter] = useState<Filter>('todos')
+  const [langFilter, setLangFilter] = useState<'todos' | 'ca' | 'es' | 'none'>('todos')
+  const [langExportOpen, setLangExportOpen] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [assignTarget, setAssignTarget] = useState('')
   const [distributeMode, setDistributeMode] = useState<'random' | 'byGroup' | 'balanced' | null>(null)
@@ -34,8 +40,10 @@ export default function GuestList() {
   const [dietSummaryOpen, setDietSummaryOpen] = useState(false)
   const dietaryCount = project.guests.filter((g) => g.status !== 'rechazado' && hasDietary(g.dietary)).length
   const giftCount = project.guests.filter((g) => g.status !== 'rechazado' && g.gift).length
+  const activeGuests = project.guests.filter((g) => g.status !== 'rechazado')
+  const langCounts = { ca: activeGuests.filter((g) => g.language === 'ca').length, es: activeGuests.filter((g) => g.language === 'es').length, none: activeGuests.filter((g) => !g.language).length }
 
-  const tableName = useMemo(() => new Map(scenario.tables.map((t) => [t.id, t.name])), [scenario.tables])
+  const tableLabel = (g: { tableId: string | null; seatIndex: number | null }) => (g.tableId ? guestTableLabel(scenario, g, false) || undefined : undefined)
 
   const groups = useMemo(() => Array.from(new Set(project.guests.map((g) => g.group).filter(Boolean))), [project.guests])
 
@@ -47,6 +55,7 @@ export default function GuestList() {
     if (filter === 'asignados' && !g.tableId) return false
     if (filter === 'restricciones' && !hasDietary(g.dietary)) return false
     if (filter === 'regalos' && !g.gift) return false
+    if (langFilter === 'none' ? !!g.language : langFilter !== 'todos' && g.language !== langFilter) return false
     return true
   })
 
@@ -108,6 +117,13 @@ export default function GuestList() {
           🎁 {giftCount} regalo(s) en mesa · ver quién
         </button>
       )}
+      {totalGuests > 0 && (
+        <div className="dietary-summary-link text-sm lang-summary">
+          <span>🗣 CAT {langCounts.ca} · ESP {langCounts.es}</span>
+          {langCounts.none > 0 && <button className="link-button" onClick={() => setLangFilter('none')}>{langCounts.none} sin idioma</button>}
+          <button className="link-button" onClick={() => setLangExportOpen(true)} title="Copiar la columna de idioma para pegarla en la Google Sheet">→ Sheet (col. H)</button>
+        </div>
+      )}
 
       <div className="sidebar-section">
         <input
@@ -128,6 +144,21 @@ export default function GuestList() {
             <option value="pendiente">Pendiente</option>
             <option value="rechazado">Rechazado</option>
           </select>
+        </div>
+        <div className="input-row" style={{ marginTop: 8 }}>
+          <select className="select" value={langFilter} onChange={(e) => setLangFilter(e.target.value as typeof langFilter)}>
+            <option value="todos">Cualquier idioma</option>
+            <option value="ca">Solo CAT</option>
+            <option value="es">Solo ESP</option>
+            <option value="none">Sin idioma</option>
+          </select>
+          <button
+            className="btn btn-ghost btn-sm" disabled={!filtered.length}
+            onClick={() => setSelectedGuestIds(filtered.map((g) => g.id))}
+            title="Seleccionar todos los invitados que se ven en la lista"
+          >
+            Seleccionar {filtered.length}
+          </button>
         </div>
         <div className="segmented" style={{ marginTop: 8 }}>
           <button className={filter === 'todos' ? 'is-active' : ''} onClick={() => setFilter('todos')}>Todos</button>
@@ -153,6 +184,13 @@ export default function GuestList() {
             Asignar
           </button>
           <button className="btn btn-ghost btn-sm" onClick={() => setSelectedGuestIds([])}>Cancelar</button>
+          <div className="lang-bulk">
+            <span className="text-sm text-muted">Idioma:</span>
+            {LANGUAGES.map((l) => (
+              <button key={l.code} className="btn btn-secondary btn-sm" onClick={() => setGuestsLanguage(selectedGuestIds, l.code)}>{l.abbr}</button>
+            ))}
+            <button className="btn btn-ghost btn-sm" onClick={() => setGuestsLanguage(selectedGuestIds, null)} title="Quitar idioma">—</button>
+          </div>
         </div>
       )}
 
@@ -167,7 +205,7 @@ export default function GuestList() {
             key={g.id}
             guest={g}
             selected={selectedGuestIds.includes(g.id)}
-            tableName={g.tableId ? tableName.get(g.tableId) : undefined}
+            tableName={tableLabel(g)}
             onToggleSelect={toggleSelect}
             onOpenDetail={setDetailId}
           />
@@ -183,6 +221,7 @@ export default function GuestList() {
       )}
 
       {dietSummaryOpen && <DietarySummaryModal onClose={() => setDietSummaryOpen(false)} />}
+      {langExportOpen && <LanguageExportModal onClose={() => setLangExportOpen(false)} />}
 
       {detailId && <GuestDetailModal guestId={detailId} onClose={() => setDetailId(null)} />}
 

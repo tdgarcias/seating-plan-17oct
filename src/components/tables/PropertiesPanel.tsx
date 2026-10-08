@@ -4,6 +4,7 @@ import { computeValidationIssues } from '@/utils/validation'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 import NumberField from '@/components/common/NumberField'
 import TableEditorModal from './TableEditorModal'
+import SectionEditor from './SectionEditor'
 import type { RoomFeatureType } from '@/types'
 
 const PALETTE = Array.from({ length: 9 }, (_, i) => nextPaletteColor(i))
@@ -111,6 +112,13 @@ export default function PropertiesPanel() {
               ))}
             </div>
           </div>
+
+          {table.type === 'rect' && (
+            <div className="field" style={{ marginTop: 8 }}>
+              <label>Submesas</label>
+              <SectionEditor table={table} compact />
+            </div>
+          )}
 
           <div className="flex gap-2" style={{ marginTop: 12, flexWrap: 'wrap' }}>
             <button className="btn btn-secondary btn-sm" onClick={() => updateTable(table.id, { locked: !table.locked })}>
